@@ -41,6 +41,16 @@ public class IdempotencyService {
     }
 
     /**
+     * 释放幂等键（业务失败回滚后调用，允许客户端用同一键重试）。
+     *
+     * <p>事务语义：业务异常时本地事务已回滚（库存/订单均未落库），
+     * 释放键是安全的；仅在事务提交后才应保留键（防重放）。
+     */
+    public void release(String idempotencyKey) {
+        redis.delete(KEY_PREFIX + idempotencyKey);
+    }
+
+    /**
      * 事件消费幂等（Outbox Worker 调用）：与写接口共用同一套幂等键体系，
      * 重复投递不重复执行（16.3 / 2.3）。
      */

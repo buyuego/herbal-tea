@@ -7,6 +7,7 @@ import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
 import com.herbaltea.module.product.dto.ProductUpdateRequest;
 import com.herbaltea.module.product.dto.SkuAddRequest;
+import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
 import com.herbaltea.module.product.dto.StoreListingRequest;
 import com.herbaltea.module.product.dto.StoreProductVO;
@@ -76,6 +77,14 @@ public interface ProductService {
 
     /** 回滚库存（关单/退款，同库本地事务，D10 消除） */
     void restoreStock(Long skuId, Integer qty);
+
+    /**
+     * 下单用：查询在售 SKU 与本店定价（Order 模块跨模块只读入口，模块边界约束）
+     *
+     * <p>校验链：SKU 在售 → 商品在售 → 本店已上架（status=1）→ 返回本店价；
+     * 任一不满足抛 40400（资源不存在）或 40000（已下架）。
+     */
+    SkuForSaleVO getSkuForSale(Long skuId, Long storeId);
 
     /** 库存调整（入库/盘点）：行锁 + 乐观锁 + 落流水 */
     void adjustStock(StockAdjustRequest req, Long operatorAdminId);

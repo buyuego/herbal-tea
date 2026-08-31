@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.herbaltea.common.exception.BizException;
+import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.module.product.dto.CategoryCreateRequest;
@@ -14,6 +15,7 @@ import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
 import com.herbaltea.module.product.dto.ProductUpdateRequest;
 import com.herbaltea.module.product.dto.SkuAddRequest;
+import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
 import com.herbaltea.module.product.dto.StoreListingRequest;
 import com.herbaltea.module.product.dto.StoreProductVO;
@@ -235,6 +237,31 @@ public class ProductServiceImpl implements ProductService {
             throw new BizException("回滚数量必须为正整数");
         }
         skuMapper.restoreStock(skuId, qty);
+    }
+
+    @Override
+    public SkuForSaleVO getSkuForSale(Long skuId, Long storeId) {
+        ProductSku sku = skuMapper.selectById(skuId);
+        if (sku == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "SKU 不存在");
+        }
+        if (sku.getStatus() == null || sku.getStatus() != 1) {
+            throw new BizException("SKU 已下架");
+        }
+        Product product = productMapper.selectById(sku.getProductId());
+        if (product == null || product.getStatus() == null || product.getStatus() != 1) {
+            throw new BizException("商品已下架");
+        }
+        // 本店在售校验 + 本店定价（C 端始终从门店购买）
+        StoreProduct sp = storeProductMapper.selectOne(new LambdaQueryWrapper<StoreProduct>()
+                .eq(StoreProduct::getStoreId, storeId)
+                .eq(StoreProduct::getSkuId, skuId)
+                .last("LIMIT 1"));
+        if (sp == null || sp.getStatus() == null || sp.getStatus() != 1) {
+            throw new BizException("该门店暂未上架此商品");
+        }
+        return new SkuForSaleVO(sku.getId(), product.getId(), product.getName(),
+                product.getMainImage(), sku.getSpecs(), sp.getPrice(), sku.getStock());
     }
 
     @Override
