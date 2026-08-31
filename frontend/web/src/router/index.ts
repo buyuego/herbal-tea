@@ -48,6 +48,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/staff/index.vue'),
         meta: { title: '员工管理', icon: 'User', perm: 'store:staff:manage' },
       },
+      {
+        path: 'roles',
+        name: 'roles',
+        component: () => import('@/views/roles/index.vue'),
+        meta: { title: '角色权限', icon: 'Lock', perm: 'system:role:config' },
+      },
     ],
   },
   {
