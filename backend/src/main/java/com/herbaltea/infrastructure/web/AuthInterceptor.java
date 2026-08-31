@@ -28,16 +28,21 @@ public class AuthInterceptor implements HandlerInterceptor {
 
     private final JwtUtil jwtUtil;
 
-    /** token_version 比对器：实现方查 users.token_version / admin_users.token_version */
+    /** token_version 比对器：按主体类型注册，实现方查 users.token_version / admin_users.token_version */
     public interface TokenVersionValidator {
         /** @return 当前有效 version，null 表示主体不存在（已注销） */
         Long currentVersion(String principalType, Long userId);
     }
 
-    private TokenVersionValidator versionValidator = (type, uid) -> 0L;
+    /**
+     * 按主体类型分发的比对器（Auth 模块注册 ADMIN，User 模块注册 USER）。
+     * 独立注册避免相互覆盖：C 端微信登录落地前 USER 无校验器，一律拒绝。
+     */
+    private final java.util.Map<String, TokenVersionValidator> versionValidators =
+            new java.util.concurrent.ConcurrentHashMap<>();
 
-    public void setVersionValidator(TokenVersionValidator validator) {
-        this.versionValidator = validator;
+    public void registerVersionValidator(String principalType, TokenVersionValidator validator) {
+        this.versionValidators.put(principalType, validator);
     }
 
     /**
@@ -53,6 +58,7 @@ public class AuthInterceptor implements HandlerInterceptor {
      */
     private static final String[] WHITELIST = {
             "/api/auth/admin/login", "/api/auth/refresh",
+            "/api/user/wx-login", "/api/user/refresh",
             "/api/wxpay/notify/", "/actuator/", "/v3/api-docs/", "/swagger-ui/"
     };
 
@@ -77,8 +83,9 @@ public class AuthInterceptor implements HandlerInterceptor {
         Long userId = Long.valueOf(claims.getSubject());
         Long tokenVersion = JwtUtil.tokenVersion(claims);
 
-        // R9 即时吊销：数据库 token_version 不匹配则拒绝
-        Long current = versionValidator.currentVersion(type, userId);
+        // R9 即时吊销：数据库 token_version 不匹配则拒绝（未注册类型的校验器 = 拒绝）
+        TokenVersionValidator validator = versionValidators.get(type);
+        Long current = validator == null ? null : validator.currentVersion(type, userId);
         if (current == null || !current.equals(tokenVersion)) {
             throw new BizException(ResultCode.TOKEN_REVOKED, "登录已失效，请重新登录");
         }

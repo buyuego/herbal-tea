@@ -56,19 +56,15 @@ public class AuthServiceImpl implements AuthService {
     @Value("${app.jwt.refresh-token-ttl:30d}")
     private Duration refreshTtl;
 
-    /** token_version 比对器：注入鉴权拦截器，实现 R9 即时吊销 */
+    /** token_version 比对器：注入鉴权拦截器，实现 R9 即时吊销（仅 ADMIN；USER 由 User 模块注册） */
     @PostConstruct
     void wireVersionValidator() {
-        authInterceptor.setVersionValidator((type, userId) -> {
-            if ("ADMIN".equals(type)) {
-                AdminUser admin = adminUserMapper.selectOne(
-                        new LambdaQueryWrapper<AdminUser>()
-                                .select(AdminUser::getTokenVersion)
-                                .eq(AdminUser::getId, userId));
-                return admin == null ? null : (long) admin.getTokenVersion();
-            }
-            // C 端：users 表无 token_version 列（V1 DDL），C 端登录未实现前一律拒绝
-            return null;
+        authInterceptor.registerVersionValidator("ADMIN", (type, userId) -> {
+            AdminUser admin = adminUserMapper.selectOne(
+                    new LambdaQueryWrapper<AdminUser>()
+                            .select(AdminUser::getTokenVersion)
+                            .eq(AdminUser::getId, userId));
+            return admin == null ? null : (long) admin.getTokenVersion();
         });
     }
 

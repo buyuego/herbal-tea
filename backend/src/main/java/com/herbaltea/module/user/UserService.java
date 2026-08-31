@@ -1,23 +1,47 @@
 package com.herbaltea.module.user;
 
-import com.herbaltea.module.user.entity.User;
+import com.herbaltea.module.user.dto.AddressRequest;
+import com.herbaltea.module.user.dto.UserLoginVO;
+import com.herbaltea.module.user.dto.UserProfileVO;
+import com.herbaltea.module.user.dto.WxLoginRequest;
+import com.herbaltea.module.user.entity.UserAddress;
+
+import java.util.List;
 
 /**
- * 用户模块（C 端会员：users / user_addresses / user_points_accounts）
+ * 用户模块（C 端会员：users / user_addresses）
  *
- * <p>职责：微信小程序登录、会员资料、收货地址、积分账户（与营销模块积分规则联动）。
+ * <p>职责：微信小程序登录（15.1）、会员资料、收货地址；
+ * 设备指纹登记（A5 五维哈希，Redis 90 天信任）。
+ * 积分账户（user_points_accounts）归营销模块，本模块不直读。
  */
 public interface UserService {
 
-    /** 小程序 code2session 登录：首次自动注册，签发双令牌（15.1） */
-    String wxLogin(String code, String deviceFingerprint);
+    /** 小程序 code 登录：首次自动注册，签发双令牌（15.1）；dev 走 mock 兑换 */
+    UserLoginVO wxLogin(WxLoginRequest req, String ip);
 
-    /** 刷新令牌 */
-    String refresh(String refreshToken);
+    /** 刷新令牌轮换（D12：旧 jti 作废，签发新双令牌） */
+    UserLoginVO refresh(String refreshToken);
 
-    /** 设备指纹登记（A5 五维哈希：UA/Canvas/WebGL/字体/屏幕），异地强制短信验证 */
+    /** 登出：token_version +1 使全部已签发 JWT 秒级失效（R9） */
+    void logout(Long userId);
+
+    /** 会员资料（脱敏） */
+    UserProfileVO getProfile(Long userId);
+
+    /** 更新资料（昵称/头像，空值不更新） */
+    void updateProfile(Long userId, String nickname, String avatarUrl);
+
+    /** 设备指纹登记（A5 五维哈希 → Redis 信任 90 天，last_used 滚动续期） */
     void bindDevice(Long userId, String fingerprint, String ip);
 
-    /** 会员信息 */
-    User getProfile(Long userId);
+    // ===== 收货地址 =====
+
+    List<UserAddress> listAddresses(Long userId);
+
+    UserAddress addAddress(Long userId, AddressRequest req);
+
+    UserAddress updateAddress(Long userId, Long addressId, AddressRequest req);
+
+    void deleteAddress(Long userId, Long addressId);
 }

@@ -1,4 +1,4 @@
-package com.herbaltea.module.order.entity;
+package com.herbaltea.module.user.entity;
 
 import com.baomidou.mybatisplus.annotation.IdType;
 import com.baomidou.mybatisplus.annotation.TableId;
@@ -8,10 +8,9 @@ import lombok.Data;
 import lombok.EqualsAndHashCode;
 
 /**
- * user_addresses 表实体（收货地址快照读取）
+ * user_addresses 表实体（收货地址）
  *
- * <p><b>归属说明</b>：地址属用户域（User 模块落地后应迁移至 user 包）。
- * 订单模块仅做下单时的归属校验与快照读取，不维护地址数据。
+ * <p>归属 User 模块维护；Order 模块仅做下单时的归属校验与快照读取（跨模块只读走接口）。
  */
 @Data
 @EqualsAndHashCode(callSuper = true)

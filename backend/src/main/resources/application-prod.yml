@@ -24,6 +24,11 @@ wx:
     private-key-path: ${WXPAY_PRIVATE_KEY_PATH}
     notify-url: ${WXPAY_NOTIFY_URL}
 
+app:
+  wx:
+    # 生产禁用 mock 登录：必须走真实微信 code2session
+    mock: false
+
 sms:
   provider-key: ${SMS_PROVIDER_KEY}
   sign-name: ${SMS_SIGN_NAME}

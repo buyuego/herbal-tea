@@ -72,3 +72,8 @@ app:
     # 初始超管治理（AdminPasswordResetRunner）：V2__init_data.sql 占位密码检测锚点
     initial-username: admin
     placeholder-hash: ${ADMIN_PLACEHOLDER_HASH:$2a$10$PLACEHOLDER.RESET.VIA.CLI.BEFORE.FIRST.LOGIN}
+  wx:
+    # C 端微信登录：dev 默认 mock（code → mock-openid-<code>）；生产必须 WX_MOCK=false + 真实 appid/secret
+    mock: ${WX_MOCK:true}
+    appid: ${WX_APPID:}
+    secret: ${WX_SECRET:}
