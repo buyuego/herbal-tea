@@ -66,6 +66,8 @@ interface RequestOptions {
   method?: 'GET' | 'POST' | 'PUT' | 'DELETE'
   /** JSON body；FormData 请自行传入 raw body */
   body?: unknown
+  /** GET 查询参数（undefined/null/空串自动剔除） */
+  params?: Record<string, unknown>
   /** 是否跳过自动 refresh 重放（refresh 接口自身必须跳过） */
   skipAuthRetry?: boolean
   /** 业务层可关闭 5xx/网络自动重试（如轮询） */
@@ -73,9 +75,20 @@ interface RequestOptions {
   headers?: Record<string, string>
 }
 
+/** 查询参数序列化：剔除 undefined/null/空串，追加到 URL */
+function buildUrl(path: string, params?: Record<string, unknown>): string {
+  const base = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  if (!params) return base
+  const qs = Object.entries(params)
+    .filter(([, v]) => v !== undefined && v !== null && v !== '')
+    .map(([k, v]) => `${encodeURIComponent(k)}=${encodeURIComponent(String(v))}`)
+    .join('&')
+  return qs ? `${base}?${qs}` : base
+}
+
 export async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = 'GET', body, skipAuthRetry = false, noRetry = false, headers = {} } = options
-  const url = `${BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+  const { method = 'GET', body, params, skipAuthRetry = false, noRetry = false, headers = {} } = options
+  const url = buildUrl(path, params)
 
   const doFetch = async (withAuth: boolean, attempt: number): Promise<ApiResult<T>> => {
     const controller = new AbortController()
