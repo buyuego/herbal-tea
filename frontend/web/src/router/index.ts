@@ -31,6 +31,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '商品管理', icon: 'Goods', perm: 'menu:product' },
       },
       {
+        path: 'orders',
+        name: 'orders',
+        component: () => import('@/views/orders/index.vue'),
+        meta: { title: '订单管理', icon: 'List', perm: 'menu:order' },
+      },
+      {
         path: 'stores',
         name: 'stores',
         component: () => import('@/views/stores/index.vue'),
