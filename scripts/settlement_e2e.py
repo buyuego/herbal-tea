@@ -181,7 +181,12 @@ def main():
       row[0] == 40 and row[1] and row[1].startswith("PO") and row[2] is not None, str(row))
 
     print("== 7. 越权矩阵（107/213/214） ==")
-    for name, tk in [("店长 store_admin1", sa1_t), ("店员 staff1", staff_t), ("仓管 warehouse1", wh_t)]:
+    # v24 起 STORE_ADMIN 补 107（结算异议申诉矩阵），店长可分页本店但无 review/pay
+    st, body = call("GET", "/api/settlement/admin/page", sa1_t)
+    p("店长分页本店 OK（v24 补 107）", body.get("code") == 0, f"{st} {body}")
+    st, body = call("POST", f"/api/settlement/admin/{sid}/pay", sa1_t)
+    p("店长 pay 越权 → 40300", body.get("code") == 40300, f"{st} {body}")
+    for name, tk in [("店员 staff1", staff_t), ("仓管 warehouse1", wh_t)]:
         st, body = call("GET", "/api/settlement/admin/page", tk)
         p(f"{name} 无 menu:settlement → 40300", body.get("code") == 40300, f"{st} {body}")
         st, body = call("POST", f"/api/settlement/admin/{sid}/pay", tk)

@@ -79,6 +79,9 @@
             <el-tag :type="SETTLEMENT_STATUS_TAG[row.status] || 'info'" size="small">
               {{ row.statusDesc || SETTLEMENT_STATUS[row.status] || `#${row.status}` }}
             </el-tag>
+            <el-tag v-if="row.confirmStatus === 3" type="warning" size="small" effect="plain" class="dispute-tag">
+              有异议
+            </el-tag>
             <div v-if="row.payoutNo" class="cell-sub">流水 {{ row.payoutNo }}</div>
           </template>
         </el-table-column>
@@ -176,7 +179,20 @@
           <el-descriptions-item v-if="detail.reviewedBy" label="审核人">财务 #{{ detail.reviewedBy }}</el-descriptions-item>
           <el-descriptions-item v-if="detail.paidAt" label="打款时间">{{ formatTime(detail.paidAt) }}</el-descriptions-item>
           <el-descriptions-item v-if="detail.payoutNo" label="打款流水">{{ detail.payoutNo }}</el-descriptions-item>
+          <el-descriptions-item v-if="detail.parentSettlementId" label="关联原结算单">
+            <el-button type="primary" link @click="openDetail(detail.parentSettlementId)">#{{ detail.parentSettlementId }}</el-button>
+          </el-descriptions-item>
         </el-descriptions>
+
+        <!-- 异议说明 -->
+        <el-alert
+          v-if="detail.disputeNote"
+          type="warning"
+          :closable="false"
+          :title="`门店异议（${CONFIRM_STATUS[detail.confirmStatus] ?? ''}）：${detail.disputeNote}`"
+          show-icon
+          class="mt-16"
+        />
 
         <!-- 金额明细（11.2 口径） -->
         <el-descriptions :column="3" border size="small" title="金额明细" class="mt-16">
@@ -239,9 +255,74 @@
             :loading="acting"
             @click="onPayFromDetail"
           >打款</el-button>
+          <el-button
+            v-if="detail && isStoreSide && detail.status <= 20 && detail.confirmStatus !== 3"
+            type="warning"
+            @click="openDisputeDialog"
+          >提出异议</el-button>
+          <el-button
+            v-if="detail && canReconcile && detail.confirmStatus === 3"
+            type="primary"
+            @click="openReconcileDialog"
+          >复核生成调整单</el-button>
         </div>
       </template>
     </el-drawer>
+
+    <!-- 异议申诉对话框 -->
+    <el-dialog v-model="disputeVisible" title="结算异议申诉" width="440px" destroy-on-close>
+      <el-form label-width="80px">
+        <el-form-item label="异议说明" required>
+          <el-input
+            v-model="disputeNote"
+            type="textarea"
+            :rows="4"
+            maxlength="200"
+            show-word-limit
+            placeholder="请说明对结算单金额的异议（如佣金计算、漏单等），平台将复核处理"
+          />
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          title="提交后结算单标记「有异议」，不会被自动确认；平台复核后生成调整单补偿/扣减。"
+          show-icon
+        />
+      </el-form>
+      <template #footer>
+        <el-button @click="disputeVisible = false">取消</el-button>
+        <el-button type="warning" :loading="disputeSaving" @click="onDispute">提交申诉</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 复核生成调整单对话框 -->
+    <el-dialog v-model="reconcileVisible" title="复核生成调整单" width="440px" destroy-on-close>
+      <el-form label-width="90px">
+        <el-form-item label="调整金额" required>
+          <el-input-number v-model="reconcileAmount" :min="0.01" :precision="2" :step="10" style="width: 100%" />
+        </el-form-item>
+        <el-form-item label="复核说明">
+          <el-input
+            v-model="reconcileRemark"
+            type="textarea"
+            :rows="3"
+            maxlength="200"
+            show-word-limit
+            placeholder="复核结论说明（如：核实漏计一笔订单，补偿差价）"
+          />
+        </el-form-item>
+        <el-alert
+          type="info"
+          :closable="false"
+          title="原结算单累加调整金额并生成 type=3 调整单（复用确认→审核→打款流程）；异议标记复位。"
+          show-icon
+        />
+      </el-form>
+      <template #footer>
+        <el-button @click="reconcileVisible = false">取消</el-button>
+        <el-button type="primary" :loading="reconcileSaving" @click="onReconcile">生成调整单</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -253,10 +334,12 @@ import { BizError } from '@/utils/error'
 import { myStoresApi } from '@/api/store'
 import {
   confirmSettlementApi,
+  disputeSettlementApi,
   generateSettlementApi,
   getSettlementDetailApi,
   pageSettlementsApi,
   paySettlementApi,
+  reconcileSettlementApi,
   reviewSettlementApi,
 } from '@/api/settlement'
 import { CONFIRM_STATUS, ITEM_DIRECTION, ITEM_TYPE, SETTLEMENT_STATUS, SETTLEMENT_STATUS_TAG, SETTLEMENT_TYPE } from '@/types/settlement'
@@ -266,6 +349,9 @@ import type { StoreBinding } from '@/types/api'
 const auth = useAuthStore()
 const canReview = computed(() => auth.hasPermission('settlement:review'))
 const canPay = computed(() => auth.hasPermission('settlement:payout'))
+const canReconcile = computed(() => auth.hasPermission('settlement:reconcile'))
+/** 门店侧视角（有结算查看权限但无平台审核/复核权限 = 店长），可对结算单提出异议 */
+const isStoreSide = computed(() => !canReview.value && !canReconcile.value)
 
 const loading = ref(false)
 const settlements = ref<SettlementDetail[]>([])
@@ -417,6 +503,68 @@ function onPayFromDetail() {
   ElMessageBox.confirm(`确认打款 ¥${Number(detail.value.finalAmount).toFixed(2)} 至门店 ${detail.value.storeName}？`, '打款确认', { type: 'warning' })
     .then(() => doAct(detail.value!, 'pay', true))
     .catch(() => {})
+}
+
+// ---------- 异议申诉 / 复核调整（v24） ----------
+
+const disputeVisible = ref(false)
+const disputeSaving = ref(false)
+const disputeNote = ref('')
+
+function openDisputeDialog() {
+  disputeNote.value = ''
+  disputeVisible.value = true
+}
+
+async function onDispute() {
+  if (!detail.value) return
+  if (!disputeNote.value.trim()) {
+    ElMessage.warning('请填写异议说明')
+    return
+  }
+  disputeSaving.value = true
+  try {
+    await disputeSettlementApi(detail.value.id, disputeNote.value.trim())
+    ElMessage.success('异议已提交，等待平台复核')
+    disputeVisible.value = false
+    detail.value = await getSettlementDetailApi(detail.value.id)
+    loadSettlements()
+  } catch (e) {
+    ElMessage.error(e instanceof BizError ? e.message : '提交申诉失败')
+  } finally {
+    disputeSaving.value = false
+  }
+}
+
+const reconcileVisible = ref(false)
+const reconcileSaving = ref(false)
+const reconcileAmount = ref(0)
+const reconcileRemark = ref('')
+
+function openReconcileDialog() {
+  reconcileAmount.value = 0
+  reconcileRemark.value = ''
+  reconcileVisible.value = true
+}
+
+async function onReconcile() {
+  if (!detail.value) return
+  if (!reconcileAmount.value || reconcileAmount.value <= 0) {
+    ElMessage.warning('请输入有效的调整金额')
+    return
+  }
+  reconcileSaving.value = true
+  try {
+    await reconcileSettlementApi(detail.value.id, reconcileAmount.value, reconcileRemark.value.trim() || undefined)
+    ElMessage.success('调整单已生成，可走确认→审核→打款流程')
+    reconcileVisible.value = false
+    detail.value = await getSettlementDetailApi(detail.value.id)
+    loadSettlements()
+  } catch (e) {
+    ElMessage.error(e instanceof BizError ? e.message : '复核调整失败')
+  } finally {
+    reconcileSaving.value = false
+  }
 }
 
 onMounted(async () => {

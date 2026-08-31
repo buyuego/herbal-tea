@@ -73,4 +73,20 @@ public interface SettlementService {
      * @param amount 退款金额（冲正金额）
      */
     void reverse(Long settlementId, Long orderId, String refundNo, java.math.BigDecimal amount);
+
+    /**
+     * 结算异议申诉（店长对本店结算单，confirm_status → 3 有异议 + dispute_note）：
+     * 仅 status ≤ 20（待确认/审核期）可申诉；有异议单不会被自动确认任务吞掉。
+     */
+    void dispute(Long settlementId, String note);
+
+    /**
+     * 复核生成调整单（settlement:reconcile，超管/财务；第 11 章申诉闭环）：
+     * 原单 adjust_amount/final_amount 更新 + type=8 调整明细行 +
+     * 生成 type=3 调整单（parent_settlement_id 关联，复用 confirm→review→pay 状态机）。
+     *
+     * @param adjustAmount 调整金额（正数=补款加项）
+     * @param remark 复核说明
+     */
+    Long reconcile(Long settlementId, java.math.BigDecimal adjustAmount, String remark);
 }

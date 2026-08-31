@@ -199,6 +199,84 @@ public class SettlementServiceImpl implements SettlementService {
                 s.getSettleNo(), orderId, refundNo, adj);
     }
 
+    // ---------- 申诉 / 复核（第 11 章异议闭环） ----------
+
+    @Override
+    @Transactional
+    public void dispute(Long settlementId, String note) {
+        Settlement s = requireSettlement(settlementId);
+        checkStoreAccess(s.getStoreId());
+        if (note == null || note.isBlank()) {
+            throw new BizException("异议说明不能为空");
+        }
+        if (s.getStatus() != SettlementStatus.PENDING_CONFIRM.getCode()
+                && s.getStatus() != SettlementStatus.PLATFORM_REVIEW.getCode()) {
+            throw new BizException("结算单当前状态（" + SettlementStatus.of(s.getStatus()).getDesc()
+                    + "）不可申诉，仅待确认/审核期可提出异议");
+        }
+        if (s.getConfirmStatus() == 3) {
+            throw new BizException("该结算单已在异议处理中，请等待平台复核");
+        }
+        s.setConfirmStatus(3); // 有异议
+        s.setDisputeNote(note.trim());
+        settlementMapper.updateById(s);
+        log.info("settlement disputed: {} note={}", s.getSettleNo(), note.trim());
+    }
+
+    @Override
+    @Transactional
+    public Long reconcile(Long settlementId, BigDecimal adjustAmount, String remark) {
+        Settlement s = requireSettlement(settlementId);
+        if (s.getConfirmStatus() != 3) {
+            throw new BizException("仅「有异议」的结算单可复核生成调整单");
+        }
+        if (adjustAmount == null || adjustAmount.compareTo(BigDecimal.ZERO) == 0) {
+            throw new BizException("调整金额不能为空或为零");
+        }
+
+        // 原单：adjust_amount 累加 + final_amount 调整（负数扣减时钳零）+ 异议标记复位
+        s.setAdjustAmount(nz(s.getAdjustAmount()).add(adjustAmount));
+        s.setFinalAmount(nz(s.getFinalAmount()).add(adjustAmount).max(BigDecimal.ZERO));
+        s.setConfirmStatus(2); // 复核完毕恢复人工确认
+        settlementMapper.updateById(s);
+
+        // 原单明细：type=8 调整行（正数加项 direction=1 / 负数减项 direction=2）
+        SettlementItem it = new SettlementItem();
+        it.setSettlementId(settlementId);
+        it.setItemType(SettlementItem.ITEM_ADJUST);
+        it.setDirection(adjustAmount.signum() > 0 ? SettlementItem.DIR_INCOME : SettlementItem.DIR_DEDUCT);
+        it.setAmount(adjustAmount.abs());
+        it.setRemark("复核调整：" + (remark == null || remark.isBlank() ? "申诉复核" : remark.trim()));
+        settlementItemMapper.insert(it);
+
+        // 生成调整单（type=3，关联原单，复用状态机 10→20→30→40）
+        Settlement adj = new Settlement();
+        adj.setSettleNo(generateNo("AD"));
+        adj.setStoreId(s.getStoreId());
+        adj.setPeriod(s.getPeriod());
+        adj.setType(Settlement.TYPE_ADJUST);
+        adj.setOrderCount(0);
+        adj.setAdjustAmount(adjustAmount);
+        adj.setFinalAmount(adjustAmount.max(BigDecimal.ZERO));
+        adj.setConfirmStatus(0);
+        adj.setStatus(SettlementStatus.PENDING_CONFIRM.getCode());
+        adj.setParentSettlementId(settlementId);
+        adj.setAutoConfirmAt(LocalDateTime.now().plusHours(72));
+        settlementMapper.insert(adj);
+
+        SettlementItem adjItem = new SettlementItem();
+        adjItem.setSettlementId(adj.getId());
+        adjItem.setItemType(SettlementItem.ITEM_ADJUST);
+        adjItem.setDirection(adjustAmount.signum() > 0 ? SettlementItem.DIR_INCOME : SettlementItem.DIR_DEDUCT);
+        adjItem.setAmount(adjustAmount.abs());
+        adjItem.setRemark("调整单（关联 " + s.getSettleNo() + "）：" + (remark == null || remark.isBlank() ? "申诉复核" : remark.trim()));
+        settlementItemMapper.insert(adjItem);
+
+        log.info("settlement reconciled: {} -> adjust settlement {} amount={} remark={}",
+                s.getSettleNo(), adj.getSettleNo(), adjustAmount, remark);
+        return adj.getId();
+    }
+
     // ---------- 内部方法 ----------
 
     /** 生成单张结算单（聚合 + 明细分行 D15） */
@@ -382,6 +460,7 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPayoutNo(r.getPayoutNo());
         vo.setCreatedAt(r.getCreatedAt());
         vo.setVersion(r.getVersion());
+        vo.setParentSettlementId(r.getParentSettlementId());
         return vo;
     }
 
@@ -411,5 +490,6 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPayoutNo(s.getPayoutNo());
         vo.setCreatedAt(s.getCreatedAt());
         vo.setVersion(s.getVersion());
+        vo.setParentSettlementId(s.getParentSettlementId());
     }
 }

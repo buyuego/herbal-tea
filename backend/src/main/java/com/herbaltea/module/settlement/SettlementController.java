@@ -27,8 +27,11 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>menu:settlement（107）：列表/详情——超管、平台财务持有</li>
  *   <li>settlement:review（213）：平台审核 20→30——超管、平台财务</li>
  *   <li>settlement:payout（214，敏感）：打款确认 30→40——仅超管（财务不可打款）</li>
- *   <li>settlement:reconcile（215）：对账（预留）</li>
+ *   <li>settlement:reconcile（215）：对账复核生成调整单——超管、平台财务</li>
  * </ul>
+ *
+ * <p>v24：结算异议申诉闭环——店长（menu:settlement + 本店）对结算单提出异议
+ * （dispute → confirm_status=3），超管/财务复核生成调整单（reconcile → type=3）。
  */
 @Tag(name = "结算管理")
 @RestController
@@ -87,5 +90,44 @@ public class SettlementController {
     public Result<Void> pay(@PathVariable Long settlementId) {
         settlementService.pay(settlementId, UserContext.get().getAdminId());
         return Result.ok();
+    }
+
+    @Operation(summary = "结算异议申诉（店长本店，confirm_status→3 有异议）",
+            description = "仅待确认/审核期（status≤20）可申诉；有异议单不会被自动确认任务吞掉")
+    @PostMapping("/admin/{settlementId}/dispute")
+    @RequirePermission("menu:settlement")
+    @AuditLog(action = "结算异议申诉")
+    public Result<Void> dispute(@PathVariable Long settlementId, @RequestBody DisputeRequest req) {
+        settlementService.dispute(settlementId, req.getNote());
+        return Result.ok();
+    }
+
+    @Operation(summary = "复核生成调整单（settlement:reconcile，超管/财务）",
+            description = "对「有异议」结算单复核：原单 adjust_amount/final_amount 更新 + type=8 调整行"
+                    + " + 生成 type=3 调整单（parent 关联原单，复用确认→审核→打款状态机）")
+    @PostMapping("/admin/{settlementId}/reconcile")
+    @RequirePermission("settlement:reconcile")
+    @AuditLog(action = "结算复核调整")
+    public Result<Long> reconcile(@PathVariable Long settlementId, @Valid @RequestBody ReconcileRequest req) {
+        return Result.ok(settlementService.reconcile(settlementId, req.getAdjustAmount(), req.getRemark()));
+    }
+
+    /** 申诉请求体 */
+    public static class DisputeRequest {
+        private String note;
+        public String getNote() { return note; }
+        public void setNote(String note) { this.note = note; }
+    }
+
+    /** 复核请求体 */
+    public static class ReconcileRequest {
+        @jakarta.validation.constraints.NotNull(message = "adjustAmount 必填")
+        @jakarta.validation.constraints.DecimalMin(value = "0.01", message = "调整金额最小 0.01")
+        private java.math.BigDecimal adjustAmount;
+        private String remark;
+        public java.math.BigDecimal getAdjustAmount() { return adjustAmount; }
+        public void setAdjustAmount(java.math.BigDecimal adjustAmount) { this.adjustAmount = adjustAmount; }
+        public String getRemark() { return remark; }
+        public void setRemark(String remark) { this.remark = remark; }
     }
 }

@@ -38,7 +38,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                    s.coupon_cost_store, s.refund_adjust, s.adjust_amount, s.final_amount,
                    s.confirm_status, s.status, s.auto_confirm_at, s.confirmed_at,
                    s.reviewed_by, s.paid_at, s.payout_no, s.dispute_note,
-                   s.created_at, s.version
+                   s.created_at, s.version, s.parent_settlement_id
             FROM settlements s
             JOIN stores st ON st.id = s.store_id
             <where>
@@ -191,11 +191,13 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
                                          @Param("end") java.time.LocalDateTime end);
 
     /**
-     * 自动确认任务用：取「待确认且 auto_confirm_at 已到期」的结算单 id（cron 每分钟扫描）
+     * 自动确认任务用：取「待确认且 auto_confirm_at 已到期」的结算单 id（cron 每分钟扫描）。
+     * 排除 confirm_status=3（有异议，等待平台复核，不自动确认）。
      */
     @Select("""
             SELECT id FROM settlements
-            WHERE status = 10 AND auto_confirm_at IS NOT NULL AND auto_confirm_at <= NOW()
+            WHERE status = 10 AND confirm_status != 3
+              AND auto_confirm_at IS NOT NULL AND auto_confirm_at <= NOW()
             ORDER BY id
             LIMIT #{limit}
             """)

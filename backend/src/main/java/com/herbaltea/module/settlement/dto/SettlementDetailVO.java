@@ -96,6 +96,9 @@ public class SettlementDetailVO {
     @Schema(description = "乐观锁版本")
     private Integer version;
 
+    /** 关联原结算单（type=3 调整单用） */
+    private Long parentSettlementId;
+
     @Schema(description = "明细行（按积分来源分行，D15）")
     private List<SettlementItem> items;
 }

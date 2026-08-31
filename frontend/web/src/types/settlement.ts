@@ -91,6 +91,8 @@ export interface SettlementDetail {
   payoutNo: string | null
   createdAt: string
   version: number
+  /** 关联原结算单（type=3 调整单用） */
+  parentSettlementId: number | null
   items: SettlementItem[]
 }
 

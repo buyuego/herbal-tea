@@ -90,4 +90,7 @@ public class SettlementPageVO {
 
     @Schema(description = "乐观锁版本")
     private Integer version;
+
+    /** 关联原结算单（type=3 调整单用） */
+    private Long parentSettlementId;
 }

@@ -99,6 +99,9 @@ public class Settlement extends BaseEntity {
     /** 打款流水号（幂等键组成部分） */
     private String payoutNo;
 
+    /** 关联原结算单（type=3 调整单用，申诉复核后生成） */
+    private Long parentSettlementId;
+
     /** 乐观锁（审核/打款防并发） */
     @Version
     private Integer version;
