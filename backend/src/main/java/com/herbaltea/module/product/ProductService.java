@@ -2,6 +2,9 @@ package com.herbaltea.module.product;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.module.product.dto.CategoryCreateRequest;
+import com.herbaltea.module.product.dto.InventoryQuery;
+import com.herbaltea.module.product.dto.InventoryRecordVO;
+import com.herbaltea.module.product.dto.InventoryVO;
 import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
@@ -11,7 +14,6 @@ import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
 import com.herbaltea.module.product.dto.StoreListingRequest;
 import com.herbaltea.module.product.dto.StoreProductVO;
-import com.herbaltea.module.product.entity.InventoryRecord;
 import com.herbaltea.module.product.entity.Product;
 import com.herbaltea.module.product.entity.ProductCategory;
 
@@ -89,8 +91,17 @@ public interface ProductService {
     /** 库存调整（入库/盘点）：行锁 + 乐观锁 + 落流水 */
     void adjustStock(StockAdjustRequest req, Long operatorAdminId);
 
-    /** 库存流水分页（按 SKU / 单号过滤） */
-    IPage<InventoryRecord> pageInventoryRecords(Long skuId, String bizNo, long page, long size);
+    /** 库存流水分页（按 SKU / 单号 / 变动类型过滤） */
+    IPage<InventoryRecordVO> pageInventoryRecords(Long skuId, String bizNo, Integer changeType,
+                                                  long page, long size);
+
+    /**
+     * 库存总览分页（v25）：SKU × 商品 × 分类 联表，预警行优先
+     */
+    IPage<InventoryVO> pageInventory(InventoryQuery query);
+
+    /** 设置低库存预警阈值（v25，inventory:manage） */
+    void setAlertStock(Long skuId, Integer alertStock);
 
     // ==================== 店铺上架（门店） ====================
 

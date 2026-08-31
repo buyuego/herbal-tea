@@ -89,12 +89,8 @@ import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useAuthStore } from '@/stores/auth'
 import { BizError } from '@/utils/error'
-import {
-  addSkuApi,
-  adjustStockApi,
-  getProductDetailApi,
-  updateSkuStatusApi,
-} from '@/api/product'
+import { adjustStockApi } from '@/api/inventory'
+import { addSkuApi, getProductDetailApi, updateSkuStatusApi } from '@/api/product'
 import type { Product, ProductDetail, ProductSku } from '@/types/product'
 
 const props = defineProps<{

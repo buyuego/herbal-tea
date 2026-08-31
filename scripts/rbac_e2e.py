@@ -23,7 +23,7 @@ import requests
 
 BASE = "http://localhost:8080"
 PW = "Store@123456"
-ADMIN_PW = "QVMWb_-_mr%+gb4D"  # admin 专用密码（seed 数据）
+ADMIN_PW = "Admin@123456"  # admin 专用密码（seed 数据）
 
 passed = 0
 failed = 0

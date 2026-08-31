@@ -74,7 +74,9 @@ def find_order_id(s, order_no):
 def main():
     s = requests.Session()
 
-    print(f"===== 初始库存: {stock()} =====")
+    # 基线库存动态取值：SKU 6 的库存会被历史联测/手工调整影响，不再硬编码 300
+    base = stock()
+    print(f"===== 初始库存（基线）: {base} =====")
 
     # 1. 微信登录
     r = s.post(f"{BASE}/api/user/wx-login", json={
@@ -95,8 +97,8 @@ def main():
     order_no1 = body["data"]["orderNo"]
     pay_no1 = body["data"]["payNo"]
     st = stock()
-    print(f"    下单后库存: {st}（应 298）")
-    assert st == 298, f"!! 下单后库存异常: {st}"
+    print(f"    下单后库存: {st}（应 {base - 2}）")
+    assert st == base - 2, f"!! 下单后库存异常: {st}"
 
     # 3. 幂等重放（同 Key）→ 40901 重复请求被拦截
     r = s.post(f"{BASE}/api/order/create", json={
@@ -105,17 +107,17 @@ def main():
     body = p("3. 幂等重放(同Key, 预期40901)", r)
     assert body.get("code") == 40901, "!! 幂等兜底未生效"
     st = stock()
-    print(f"    重放后库存: {st}（应仍 298）")
-    assert st == 298, "!! 重放导致重复扣减"
+    print(f"    重放后库存: {st}（应仍 {base - 2}）")
+    assert st == base - 2, "!! 重放导致重复扣减"
 
-    # 4. 取消订单#1 → 库存回滚 300
+    # 4. 取消订单#1 → 库存回滚至基线
     oid1 = find_order_id(s, order_no1)
     r = s.post(f"{BASE}/api/order/{oid1}/cancel")
     body = p("4. 取消订单#1", r)
     assert body.get("code") == 0, "取消失败"
     st = stock()
-    print(f"    取消后库存: {st}（应 300 回滚）")
-    assert st == 300, f"!! 库存未回滚: {st}"
+    print(f"    取消后库存: {st}（应 {base} 回滚）")
+    assert st == base, f"!! 库存未回滚: {st}"
     row = order_status(order_no1)
     print(f"    订单#1 状态: {row[2]}（应 70 已关闭）")
     assert row[2] == 70, f"!! 取消后状态异常: {row[2]}"
@@ -131,8 +133,8 @@ def main():
     order_no2 = body["data"]["orderNo"]
     pay_no2 = body["data"]["payNo"]
     st = stock()
-    print(f"    下单后库存: {st}（应 298）")
-    assert st == 298
+    print(f"    下单后库存: {st}（应 {base - 2}）")
+    assert st == base - 2
 
     # 6. mock 支付
     r = s.post(f"{BASE}/api/internal/mock-pay", json={"payNo": pay_no2})
@@ -152,7 +154,7 @@ def main():
 
     # 8. B 端 admin 登录 + 发货（30→40）
     s2 = requests.Session()
-    r = s2.post(f"{BASE}/api/auth/admin/login", json={"username": "admin", "password": "QVMWb_-_mr%+gb4D"})
+    r = s2.post(f"{BASE}/api/auth/admin/login", json={"username": "admin", "password": "Admin@123456"})
     body = p("8. admin登录", r)
     if body.get("code") != 0:
         print("admin 登录失败，中止"); sys.exit(1)
@@ -192,10 +194,10 @@ def main():
     assert order_no1 in nos and order_no2 in nos, "!! 我的订单缺失"
 
     print("\n===== C 端订单全链路联测通过 =====")
-    print(f"订单#1 {order_no1}：10待支付 → 取消70（库存回滚 298→300）✅")
+    print(f"订单#1 {order_no1}：10待支付 → 取消70（库存回滚 {base - 2}→{base}）✅")
     print(f"订单#2 {order_no2}：10待支付 → 30待发货 → 40已发货 → 50已签收 ✅")
     print(f"幂等：同 Key 重放 40901 拦截 ✅；待发货取消拒绝 ✅；重复签收拒绝 ✅")
-    print(f"最终库存: {stock()}（应 298）")
+    print(f"最终库存: {stock()}（应 {base - 2}）")
 
 
 if __name__ == "__main__":

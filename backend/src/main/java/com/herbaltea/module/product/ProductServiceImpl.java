@@ -10,6 +10,9 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.module.product.dto.CategoryCreateRequest;
+import com.herbaltea.module.product.dto.InventoryQuery;
+import com.herbaltea.module.product.dto.InventoryRecordVO;
+import com.herbaltea.module.product.dto.InventoryVO;
 import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
@@ -311,12 +314,50 @@ public class ProductServiceImpl implements ProductService {
     }
 
     @Override
-    public IPage<InventoryRecord> pageInventoryRecords(Long skuId, String bizNo, long page, long size) {
-        LambdaQueryWrapper<InventoryRecord> wrapper = new LambdaQueryWrapper<InventoryRecord>()
-                .eq(skuId != null, InventoryRecord::getSkuId, skuId)
-                .eq(StringUtils.hasText(bizNo), InventoryRecord::getBizNo, bizNo)
-                .orderByDesc(InventoryRecord::getId);
-        return inventoryRecordMapper.selectPage(new Page<>(page, size), wrapper);
+    public IPage<InventoryRecordVO> pageInventoryRecords(Long skuId, String bizNo, Integer changeType,
+                                                        long page, long size) {
+        if (changeType != null
+                && changeType != InventoryRecord.TYPE_INBOUND
+                && changeType != InventoryRecord.TYPE_OUTBOUND
+                && changeType != InventoryRecord.TYPE_ADJUST
+                && changeType != InventoryRecord.TYPE_REFUND_RESTORE) {
+            throw new BizException("变动类型不合法：1入库 / 2出库 / 3盘点 / 4退款回库");
+        }
+        return inventoryRecordMapper.pageRecords(new Page<>(page, size), skuId, bizNo, changeType);
+    }
+
+    @Override
+    public IPage<InventoryVO> pageInventory(InventoryQuery query) {
+        InventoryQuery q = query == null ? new InventoryQuery() : query;
+        if (q.getPage() <= 0) {
+            q.setPage(1);
+        }
+        if (q.getSize() <= 0) {
+            q.setSize(10);
+        }
+        if (q.getSize() > 100) {
+            q.setSize(100);
+        }
+        return skuMapper.pageInventory(new Page<>(q.getPage(), q.getSize()), q);
+    }
+
+    @Override
+    public void setAlertStock(Long skuId, Integer alertStock) {
+        if (alertStock == null || alertStock < 0) {
+            throw new BizException("预警阈值不能为负");
+        }
+        if (alertStock > 1_000_000) {
+            throw new BizException("预警阈值过大");
+        }
+        ProductSku sku = requireSku(skuId);
+        ProductSku update = new ProductSku();
+        update.setId(sku.getId());
+        update.setAlertStock(alertStock);
+        update.setVersion(sku.getVersion());
+        if (skuMapper.updateById(update) == 0) {
+            throw BizException.conflict("SKU 已被他人修改，请刷新后重试");
+        }
+        log.info("设置库存预警 skuId={} alertStock={}", sku.getId(), alertStock);
     }
 
     // ==================== 店铺上架 ====================

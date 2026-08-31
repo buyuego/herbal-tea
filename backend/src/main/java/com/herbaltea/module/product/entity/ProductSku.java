@@ -47,6 +47,9 @@ public class ProductSku extends BaseEntity {
     /** 总仓库存（总部维护，原子扣减） */
     private Integer stock;
 
+    /** 低库存预警阈值（v25：stock <= alert_stock 视为预警，默认 10） */
+    private Integer alertStock;
+
     /** 0停用 / 1启用 */
     private Integer status;
 

@@ -6,6 +6,9 @@ import com.herbaltea.infrastructure.audit.AuditLog;
 import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.product.dto.CategoryCreateRequest;
+import com.herbaltea.module.product.dto.InventoryQuery;
+import com.herbaltea.module.product.dto.InventoryRecordVO;
+import com.herbaltea.module.product.dto.InventoryVO;
 import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
@@ -15,7 +18,6 @@ import com.herbaltea.module.product.dto.StockAdjustRequest;
 import com.herbaltea.module.product.dto.StoreListingRequest;
 import com.herbaltea.module.product.dto.StorePriceRequest;
 import com.herbaltea.module.product.dto.StoreProductVO;
-import com.herbaltea.module.product.entity.InventoryRecord;
 import com.herbaltea.module.product.entity.Product;
 import com.herbaltea.module.product.entity.ProductCategory;
 import io.swagger.v3.oas.annotations.Operation;
@@ -153,15 +155,33 @@ public class ProductController {
         return Result.ok();
     }
 
-    @Operation(summary = "库存流水分页", description = "按 SKU / 关联单号过滤（出库流水由订单扣减写入）")
+    @Operation(summary = "库存流水分页", description = "按 SKU / 关联单号 / 变动类型过滤（出库流水由订单扣减写入）")
     @GetMapping("/inventory/records")
     @RequirePermission("inventory:manage")
-    public Result<IPage<InventoryRecord>> pageInventoryRecords(
+    public Result<IPage<InventoryRecordVO>> pageInventoryRecords(
             @RequestParam(required = false) Long skuId,
             @RequestParam(required = false) String bizNo,
+            @RequestParam(required = false) Integer changeType,
             @RequestParam(defaultValue = "1") long page,
             @RequestParam(defaultValue = "10") long size) {
-        return Result.ok(productService.pageInventoryRecords(skuId, bizNo, page, size));
+        return Result.ok(productService.pageInventoryRecords(skuId, bizNo, changeType, page, size));
+    }
+
+    @Operation(summary = "库存总览分页", description = "SKU × 商品 × 分类 联表；预警行（stock<=alert_stock）优先；支持关键词/分类/状态/仅看预警")
+    @GetMapping("/inventory/skus")
+    @RequirePermission("menu:inventory")
+    public Result<IPage<InventoryVO>> pageInventory(@ModelAttribute InventoryQuery query) {
+        return Result.ok(productService.pageInventory(query));
+    }
+
+    @Operation(summary = "设置低库存预警阈值", description = "stock <= alert_stock 时在总览标记预警（仓管维护）")
+    @PutMapping("/inventory/skus/{id}/alert")
+    @RequirePermission("inventory:manage")
+    @AuditLog(action = "设置库存预警")
+    public Result<Void> setAlertStock(@PathVariable Long id,
+                                      @RequestParam @NotNull Integer alertStock) {
+        productService.setAlertStock(id, alertStock);
+        return Result.ok();
     }
 
     // ==================== 本店上架（门店） ====================

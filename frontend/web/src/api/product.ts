@@ -52,24 +52,7 @@ export const addSkuApi = (productId: number, data: Record<string, unknown>) =>
 export const updateSkuStatusApi = (id: number, status: number) =>
   http.put<void>(`/product/admin/skus/${id}/status`, undefined, { params: { status } })
 
-// ==================== 库存（inventory:manage） ====================
-
-/** 库存调整（1入库 / 3盘点） */
-export const adjustStockApi = (data: {
-  skuId: number
-  changeType: number
-  changeQty: number
-  bizNo?: string
-  note?: string
-}) => http.post<void>('/product/inventory/adjust', data)
-
-/** 库存流水 */
-export const pageInventoryRecordsApi = (params: {
-  skuId?: number
-  bizNo?: string
-  page?: number
-  size?: number
-}) => http.get<PageResult<unknown>>('/product/inventory/records', { params })
+// 注：库存相关接口（总览/流水/调整/预警阈值）已统一迁移至 @/api/inventory
 
 // ==================== 本店上架（门店） ====================
 

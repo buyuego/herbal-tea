@@ -25,9 +25,11 @@ import requests
 
 BASE = "http://localhost:8080"
 PW = "Store@123456"
-ADMIN_PW = "QVMWb_-_mr%+gb4D"
+ADMIN_PW = "Admin@123456"
 
 passed = 0
+# 本次联测新建的实体 id（供 finally 兜底清理，保持基线可重复跑）
+CLEANUP_IDS = {"stores": [], "apps": []}
 failed = 0
 
 
@@ -137,6 +139,7 @@ def main():
                      "intendedRegion": "广州市天河区", "experience": "5 年餐饮经营"})
     body = p("1.1 提交加盟申请", r, 0)
     app_id = body["data"]
+    CLEANUP_IDS["apps"].append(app_id)
     print(f"      ↑ applicationId={app_id}")
 
     r = s.post(f"{BASE}/api/store/franchise/apply",
@@ -172,6 +175,7 @@ def main():
     r = s0.post(f"{BASE}/api/store/admin/franchise/applications/{app_id}/approve")
     body = p("3.2 审批通过", r, 0)
     new_store_id = body["data"]
+    CLEANUP_IDS["stores"].append(new_store_id)
     print(f"      ↑ 新门店 id={new_store_id}")
 
     row = db_one("SELECT status, reviewed_by, reviewed_at IS NOT NULL FROM franchise_applications WHERE id=%s",
@@ -210,6 +214,7 @@ def main():
                 json={"applicantName": "刘先生", "phone": "13900000002", "intendedRegion": "佛山"})
     body = p("4.1 第二条加盟申请", r, 0)
     app2 = body["data"]
+    CLEANUP_IDS["apps"].append(app2)
     r = s0.post(f"{BASE}/api/store/admin/franchise/applications/{app2}/reject",
                 params={"reviewNote": "意向区域与现有网点重叠"})
     p("4.2 审批拒绝", r, 0)
@@ -253,8 +258,11 @@ def main():
 
     owner_t = login("franchise_owner1")
     c = jwt_claims(owner_t)
-    assert c.get("sid") == new_store_id and c.get("r") == 4, f"新店主 claims 异常: {c}"
-    print(f"  ✅ 5.7 JWT claims: sid={c.get('sid')} r={c.get('r')}（新店数据范围生效）")
+    # 店主可绑定多店（历史跑批会累积），sid 取 sids 首项，故校验新店在其可见范围内即可
+    sids = [int(x) for x in str(c.get("sids") or "").split(",") if x]
+    assert (c.get("sid") == new_store_id or new_store_id in sids) and c.get("r") == 4, \
+        f"新店主 claims 异常: {c}（期望可见新店 {new_store_id}）"
+    print(f"  ✅ 5.7 JWT claims: sid={c.get('sid')} sids={c.get('sids')} r={c.get('r')}（新店数据范围生效）")
     passed += 1
 
     so = requests.Session()
@@ -269,7 +277,9 @@ def main():
     s2a.headers.update(auth(sa2_t))
     r = s2a.post(f"{BASE}/api/product/store/listings",
                  json={"productId": 3, "skuId": 6, "price": 88.00})
-    p("6.1 店2 本店上架（product3/sku6）", r, 0)
+    body = p("6.1 店2 本店上架（product3/sku6）", r)
+    # 幂等：历史跑批可能已上架同 SKU，40900（已上架）同样满足后续置脏复核的前置条件
+    assert body.get("code") in (0, 40900), f"店2 上架异常: {body}"
 
     conn = db()
     cur = conn.cursor()
@@ -295,5 +305,33 @@ def main():
         sys.exit(1)
 
 
+def cleanup(store_ids, app_ids):
+    """清理本次联测新建的门店/申请，保持基线可重复跑"""
+    conn = db()
+    cur = conn.cursor()
+    try:
+        for sid in [s for s in store_ids if s]:
+            cur.execute("DELETE FROM store_products WHERE store_id=%s", (sid,))
+            cur.execute("DELETE FROM store_admins WHERE store_id=%s", (sid,))
+            cur.execute("DELETE FROM store_settlement_configs WHERE store_id=%s", (sid,))
+            cur.execute("DELETE FROM franchise_deposits WHERE store_id=%s", (sid,))
+            cur.execute("DELETE FROM stores WHERE id=%s", (sid,))
+        for aid in [a for a in app_ids if a]:
+            cur.execute("DELETE FROM franchise_applications WHERE id=%s", (aid,))
+        print(f"  ℹ 清理测试门店 {store_ids} / 申请 {app_ids}")
+    finally:
+        cur.close()
+        conn.close()
+
+
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    finally:
+        # 兜底清理：断言失败也不留测试门店
+        _ids = globals().get("CLEANUP_IDS") or {}
+        if _ids:
+            try:
+                cleanup(_ids.get("stores", []), _ids.get("apps", []))
+            except Exception as e:
+                print(f"  ⚠ 兜底清理失败: {e}")

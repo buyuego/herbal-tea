@@ -26,7 +26,7 @@ import requests
 
 BASE = "http://localhost:8080"
 PW = "Store@123456"
-ADMIN_PW = "QVMWb_-_mr%+gb4D"
+ADMIN_PW = "Admin@123456"
 
 DB = dict(host="127.0.0.1", port=3306, user="herbal_tea",
           password="herbal_tea_dev", database="herbal_tea",

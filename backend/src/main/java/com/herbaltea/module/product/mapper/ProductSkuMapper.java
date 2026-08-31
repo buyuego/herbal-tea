@@ -1,6 +1,9 @@
 package com.herbaltea.module.product.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.herbaltea.module.product.dto.InventoryQuery;
+import com.herbaltea.module.product.dto.InventoryVO;
 import com.herbaltea.module.product.entity.ProductSku;
 import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
@@ -36,4 +39,28 @@ public interface ProductSkuMapper extends BaseMapper<ProductSku> {
      */
     @Select("SELECT * FROM product_skus WHERE id = #{skuId} FOR UPDATE")
     ProductSku lockById(@Param("skuId") Long skuId);
+
+    /**
+     * 库存总览分页（v25）：SKU × 商品 × 分类 联表，预警行优先（stock 升序）。
+     */
+    @Select("""
+            SELECT s.id AS skuId, s.product_id AS productId, p.name AS productName,
+                   p.category_id AS categoryId, c.name AS categoryName,
+                   s.sku_code AS skuCode, s.specs AS specs,
+                   s.stock AS stock, s.alert_stock AS alertStock,
+                   (s.stock <= s.alert_stock) AS lowStock,
+                   s.cost_price AS costPrice, s.price AS price,
+                   s.status AS status, s.updated_at AS updatedAt
+            FROM product_skus s
+                     JOIN products p ON p.id = s.product_id
+                     LEFT JOIN product_categories c ON c.id = p.category_id
+            WHERE (#{q.categoryId} IS NULL OR p.category_id = #{q.categoryId})
+              AND (#{q.status} IS NULL OR s.status = #{q.status})
+              AND (#{q.lowStockOnly} IS NULL OR #{q.lowStockOnly} = 0 OR s.stock <= s.alert_stock)
+              AND (#{q.keyword} IS NULL OR #{q.keyword} = ''
+                   OR p.name LIKE CONCAT('%', #{q.keyword}, '%')
+                   OR s.sku_code LIKE CONCAT('%', #{q.keyword}, '%'))
+            ORDER BY lowStock DESC, s.stock ASC, s.id ASC
+            """)
+    IPage<InventoryVO> pageInventory(IPage<?> page, @Param("q") InventoryQuery q);
 }

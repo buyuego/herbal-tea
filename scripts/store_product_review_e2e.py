@@ -21,7 +21,7 @@ BASE = "http://localhost:8080"
 DB = dict(host="127.0.0.1", port=3306, user="herbal_tea", password="herbal_tea_dev",
           database="herbal_tea", charset="utf8mb4", autocommit=True)
 
-ADMIN_PW = "QVMWb_-_mr%+gb4D"
+ADMIN_PW = "Admin@123456"
 PASS = "Store@123456"
 
 passed, failed = 0, 0
