@@ -10,6 +10,7 @@ import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.auth.entity.AdminUser;
 import com.herbaltea.module.auth.mapper.AdminUserMapper;
 import com.herbaltea.module.auth.mapper.DeviceTrustMapper;
+import com.herbaltea.module.store.StoreService;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +53,7 @@ public class AuthServiceImpl implements AuthService {
     private final StringRedisTemplate redis;
     private final RateLimitInterceptor rateLimit;
     private final AuthInterceptor authInterceptor;
+    private final StoreService storeService;
 
     @Value("${app.jwt.refresh-token-ttl:30d}")
     private Duration refreshTtl;
@@ -91,7 +93,7 @@ public class AuthServiceImpl implements AuthService {
                 .eq(AdminUser::getId, admin.getId())
                 .set(AdminUser::getLastLoginAt, LocalDateTime.now()));
         log.info("管理员 {} 登录成功", admin.getUsername());
-        return issueTokenPair(admin.getId(), "ADMIN", admin.getTokenVersion());
+        return issueTokenPair(admin.getId(), "ADMIN", admin.getTokenVersion(), storeService.storeIdOfAdmin(admin.getId()));
     }
 
     @Override
@@ -118,10 +120,10 @@ public class AuthServiceImpl implements AuthService {
             redis.delete(REFRESH_SESSION_PREFIX + jti);
             throw new BizException(ResultCode.TOKEN_REVOKED, "登录已失效，请重新登录");
         }
-        // 轮换：旧 jti 作废，签发新双令牌
+        // 轮换：旧 jti 作废，签发新双令牌（主店重新查询，支持调店后刷新生效）
         redis.delete(REFRESH_SESSION_PREFIX + jti);
         log.info("管理员 {} 刷新令牌已轮换", adminId);
-        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion());
+        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(), storeService.storeIdOfAdmin(adminId));
     }
 
     @Override
@@ -137,12 +139,12 @@ public class AuthServiceImpl implements AuthService {
         log.info("管理员 {} 已登出，token_version 已递增，设备信任已吊销", adminId);
     }
 
-    /** 签发双令牌（访问 2h + 刷新 30d），刷新会话写入 Redis 供轮换校验 */
-    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion) {
+    /** 签发双令牌（访问 2h + 刷新 30d），刷新会话写入 Redis 供轮换校验；storeId 为门店管理员主店（总部传 null） */
+    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion, Long storeId) {
         String sessionId = UUID.randomUUID().toString().replace("-", "");
         long ver = tokenVersion == null ? 0L : tokenVersion;
-        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver);
-        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver);
+        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver, storeId);
+        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver, storeId);
         // 刷新会话：TTL 与刷新令牌一致（30d），吊销时 token_version 兜底
         redis.opsForValue().set(REFRESH_SESSION_PREFIX + sessionId,
                 principalType + ":" + adminId, refreshTtl);

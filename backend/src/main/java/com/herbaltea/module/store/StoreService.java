@@ -16,6 +16,15 @@ public interface StoreService {
     /** 门店管理员绑定店铺 */
     void bindStoreAdmin(Long adminId, Long storeId);
 
+    /**
+     * 查询管理员主店（登录时签发 JWT storeId 用）。
+     *
+     * <p>规则：is_owner=1 优先；无店主标记则取 status=1 最近绑定；
+     * 未绑定返回 null（= 总部管理员，dataScope=ALL）。
+     * 多店场景（store_ids[]）由后续 MULTI_STORE 扩展支持。
+     */
+    Long storeIdOfAdmin(Long adminId);
+
     /** D14：总部商品目录变更后，查询"目录已更新"待复核的本店商品 */
     void listPendingCatalogReview(Long storeId);
 }

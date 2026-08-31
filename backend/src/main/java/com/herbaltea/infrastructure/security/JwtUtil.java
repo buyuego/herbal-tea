@@ -43,19 +43,31 @@ public class JwtUtil {
     /** 签发访问令牌 */
     public String createAccessToken(Long userId, String principalType,
                                     String sessionId, Long tokenVersion) {
-        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access");
+        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", null);
+    }
+
+    /** 签发访问令牌（B 端门店管理员：附加主店 storeId claim "sid"，AuthInterceptor 据此填充 Data Scope） */
+    public String createAccessToken(Long userId, String principalType,
+                                    String sessionId, Long tokenVersion, Long storeId) {
+        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", storeId);
     }
 
     /** 签发刷新令牌 */
     public String createRefreshToken(Long userId, String principalType,
                                      String sessionId, Long tokenVersion) {
-        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh");
+        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", null);
+    }
+
+    /** 签发刷新令牌（B 端门店管理员：附加主店 storeId claim "sid"） */
+    public String createRefreshToken(Long userId, String principalType,
+                                     String sessionId, Long tokenVersion, Long storeId) {
+        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", storeId);
     }
 
     private String create(Long userId, String principalType, String sessionId,
-                          Long tokenVersion, Duration ttl, String kind) {
+                          Long tokenVersion, Duration ttl, String kind, Long storeId) {
         Date now = new Date();
-        return Jwts.builder()
+        var builder = Jwts.builder()
                 .id(sessionId)
                 .subject(String.valueOf(userId))
                 .claim("type", principalType)
@@ -63,8 +75,11 @@ public class JwtUtil {
                 .claim("kind", kind)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + ttl.toMillis()))
-                .signWith(key)
-                .compact();
+                .signWith(key);
+        if (storeId != null && storeId > 0) {
+            builder.claim("sid", storeId);
+        }
+        return builder.compact();
     }
 
     /**

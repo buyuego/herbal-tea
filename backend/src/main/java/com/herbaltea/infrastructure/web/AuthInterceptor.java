@@ -95,9 +95,11 @@ public class AuthInterceptor implements HandlerInterceptor {
         ctx.setType(admin ? UserContext.PrincipalType.ADMIN : UserContext.PrincipalType.USER);
         ctx.setUserId(userId);
         if (admin) {
-            // B 端：adminId 即登录主体；storeId 默认 0（总部），门店管理员由 DataScope 拦截器按角色填充
+            // B 端：adminId 即登录主体；storeId 取 JWT sid claim（门店管理员登录时签发），
+            // 无 sid 默认 0（总部管理员，dataScope=ALL，见 DataScopeInterceptor）
             ctx.setAdminId(userId);
-            ctx.setStoreId(0L);
+            Object sid = claims.get("sid");
+            ctx.setStoreId(sid == null ? 0L : Long.valueOf(String.valueOf(sid)));
         }
         ctx.setSessionId(JwtUtil.sessionId(claims));
         UserContext.set(ctx);
