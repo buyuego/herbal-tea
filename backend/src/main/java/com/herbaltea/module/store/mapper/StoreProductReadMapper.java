@@ -23,7 +23,9 @@ public interface StoreProductReadMapper {
      */
     @Select("""
             SELECT sp.id AS store_product_id, sp.store_id, sp.product_id, sp.sku_id,
-                   sp.price AS store_price, sp.catalog_dirty, sp.updated_at,
+                   sp.price AS store_price, sp.catalog_dirty,
+                   sp.review_status, sp.review_note, sp.reviewed_at, sp.reviewed_by,
+                   sp.updated_at,
                    p.name AS product_name,
                    s.sku_code AS sku_code, s.specs AS sku_specs
             FROM store_products sp

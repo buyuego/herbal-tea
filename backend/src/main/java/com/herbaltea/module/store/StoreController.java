@@ -1,10 +1,13 @@
 package com.herbaltea.module.store;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.Result;
+import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.audit.AuditLog;
 import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
+import com.herbaltea.module.store.dto.CatalogReviewRequest;
 import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.FranchiseApplyRequest;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
@@ -142,5 +145,34 @@ public class StoreController {
     @RequirePermission("menu:product")
     public Result<List<PendingCatalogReviewVO>> listPendingCatalogReview() {
         return Result.ok(storeService.listPendingCatalogReview(UserContext.storeId()));
+    }
+
+    @Operation(summary = "复核确认", description = "采纳新目录：catalog_dirty 1→0 + review_status→1；已确认重复 40900；已驳回可改主意确认")
+    @PostMapping("/products/{id}/review-confirm")
+    @RequirePermission("store:product:review")
+    @AuditLog(action = "目录变更复核确认")
+    public Result<Void> confirmCatalogReview(@PathVariable Long id) {
+        requireStore();
+        storeService.confirmCatalogReview(id, UserContext.get().getAdminId());
+        return Result.ok();
+    }
+
+    @Operation(summary = "复核驳回", description = "不采纳新目录：review_status→2 + 记录驳回原因（catalog_dirty 保持 1 仍待复核）；重复驳回 40900、已确认不可驳回 40900")
+    @PostMapping("/products/{id}/review-reject")
+    @RequirePermission("store:product:review")
+    @AuditLog(action = "目录变更复核驳回")
+    public Result<Void> rejectCatalogReview(@PathVariable Long id,
+                                            @Valid @RequestBody CatalogReviewRequest req) {
+        requireStore();
+        storeService.rejectCatalogReview(id, UserContext.get().getAdminId(), req.note());
+        return Result.ok();
+    }
+
+    /** 门店端管理动作前置校验：未绑定门店（总部账号）不可操作本店商品 */
+    private void requireStore() {
+        Long storeId = UserContext.storeId();
+        if (storeId == null || storeId == 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "当前账号未绑定门店，无法复核商品");
+        }
     }
 }

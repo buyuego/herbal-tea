@@ -47,6 +47,18 @@ public interface StoreService {
     List<PendingCatalogReviewVO> listPendingCatalogReview(Long storeId);
 
     /**
+     * D14 复核确认：采纳新目录。catalog_dirty 1→0 + review_status→1。
+     * 已驳回（review_status=2）可改主意确认；已确认重复确认 → 40900。
+     */
+    void confirmCatalogReview(Long storeProductId, Long operatorAdminId);
+
+    /**
+     * D14 复核驳回：不采纳新目录。review_status→2 + 记录驳回原因（catalog_dirty 保持 1）。
+     * 重复驳回 40900；已确认的商品不可驳回 40900；驳回原因必填。
+     */
+    void rejectCatalogReview(Long storeProductId, Long operatorAdminId, String note);
+
+    /**
      * 加盟保证金流水分页（总部财务）。
      * type 过滤：null 全部 / 1缴纳 / 2退还；status 过滤：null 全部 / 0待处理 / 1完成；storeId 可选。
      */

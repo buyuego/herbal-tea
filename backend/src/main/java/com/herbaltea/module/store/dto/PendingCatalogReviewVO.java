@@ -26,6 +26,18 @@ public class PendingCatalogReviewVO {
     /** 1=目录已更新待复核 */
     private Integer catalogDirty;
 
+    /** 0待复核 / 1已确认 / 2已驳回（V6 新增，驳回后仍为 catalog_dirty=1 继续出现在本列表） */
+    private Integer reviewStatus;
+
+    /** 驳回原因（review_status=2 时非空） */
+    private String reviewNote;
+
+    /** 复核时间 */
+    private LocalDateTime reviewedAt;
+
+    /** 复核人 admin_id */
+    private Long reviewedBy;
+
     private LocalDateTime updatedAt;
 
     /** 联查：商品名 */

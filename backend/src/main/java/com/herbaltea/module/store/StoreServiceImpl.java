@@ -5,11 +5,13 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.ResultCode;
+import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.auth.entity.AdminUser;
 import com.herbaltea.module.auth.mapper.AdminUserMapper;
 import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
+import com.herbaltea.module.store.dto.StoreProductReviewRow;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 import com.herbaltea.module.store.entity.FranchiseDeposit;
 import com.herbaltea.module.store.entity.Store;
@@ -20,6 +22,7 @@ import com.herbaltea.module.store.mapper.FranchiseDepositMapper;
 import com.herbaltea.module.store.mapper.StoreAdminMapper;
 import com.herbaltea.module.store.mapper.StoreMapper;
 import com.herbaltea.module.store.mapper.StoreProductReadMapper;
+import com.herbaltea.module.store.mapper.StoreProductWriteMapper;
 import com.herbaltea.module.store.mapper.StoreSettlementConfigMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -43,6 +46,7 @@ import java.util.List;
  *   <li>storeIdOfAdmin：管理员主店查询（登录 JWT 签发 + Data Scope 数据源）</li>
  *   <li>listPendingCatalogReview：D14 本店目录变更复核</li>
  *   <li>pageDeposits / confirmDeposit / refundDeposit：加盟保证金收退确认（v12）</li>
+ *   <li>confirmCatalogReview / rejectCatalogReview：D14 目录变更复核确认/驳回（v13）</li>
  * </ol>
  * 待扩展：
  * <ul>
@@ -66,6 +70,7 @@ public class StoreServiceImpl implements StoreService {
     private final StoreSettlementConfigMapper storeSettlementConfigMapper;
     private final FranchiseDepositMapper franchiseDepositMapper;
     private final StoreProductReadMapper storeProductReadMapper;
+    private final StoreProductWriteMapper storeProductWriteMapper;
     private final AdminUserMapper adminUserMapper;
 
     @Override
@@ -287,6 +292,41 @@ public class StoreServiceImpl implements StoreService {
                 depositId, deposit.getStoreId(), deposit.getBizNo(), deposit.getAmount(), operatorAdminId);
     }
 
+    // ==================== D14 目录变更复核确认/驳回（v13） ====================
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void confirmCatalogReview(Long storeProductId, Long operatorAdminId) {
+        StoreProductReviewRow row = requireReviewRow(storeProductId);
+        if (row.getReviewStatus() != null && row.getReviewStatus() == 1) {
+            throw new BizException(ResultCode.CONFLICT, "该商品已确认复核，请勿重复操作");
+        }
+        if (row.getCatalogDirty() == null || row.getCatalogDirty() != 1) {
+            throw new BizException(ResultCode.CONFLICT, "该商品不在复核队列");
+        }
+        storeProductWriteMapper.confirmReview(storeProductId, row.getStoreId(), operatorAdminId);
+        log.info("目录变更复核确认: storeProductId={} storeId={} operator={}",
+                storeProductId, row.getStoreId(), operatorAdminId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void rejectCatalogReview(Long storeProductId, Long operatorAdminId, String note) {
+        StoreProductReviewRow row = requireReviewRow(storeProductId);
+        if (row.getReviewStatus() != null && row.getReviewStatus() == 2) {
+            throw new BizException(ResultCode.CONFLICT, "该商品已驳回，请勿重复操作");
+        }
+        if (row.getReviewStatus() != null && row.getReviewStatus() == 1) {
+            throw new BizException(ResultCode.CONFLICT, "已确认复核的商品不可驳回");
+        }
+        if (row.getCatalogDirty() == null || row.getCatalogDirty() != 1) {
+            throw new BizException(ResultCode.CONFLICT, "该商品不在复核队列");
+        }
+        storeProductWriteMapper.rejectReview(storeProductId, row.getStoreId(), operatorAdminId, note);
+        log.info("目录变更复核驳回: storeProductId={} storeId={} note={} operator={}",
+                storeProductId, row.getStoreId(), note, operatorAdminId);
+    }
+
     // ==================== 私有工具 ====================
 
     private FranchiseApplication requireApplication(Long applicationId) {
@@ -303,6 +343,22 @@ public class StoreServiceImpl implements StoreService {
             throw new BizException(ResultCode.NOT_FOUND, "保证金流水不存在");
         }
         return deposit;
+    }
+
+    /**
+     * 复核目标行校验：必须存在且属于登录门店。
+     * SELECT 直接带 store_id 条件——不存在/跨店统一 40400（不暴露他店商品存在性）。
+     */
+    private StoreProductReviewRow requireReviewRow(Long storeProductId) {
+        Long storeId = UserContext.storeId();
+        if (storeId == null) {
+            throw new BizException(ResultCode.PARAM_ERROR, "当前账号未绑定门店，无法复核商品");
+        }
+        StoreProductReviewRow row = storeProductWriteMapper.selectReviewRow(storeProductId, storeId);
+        if (row == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "商品不存在或不属于本店");
+        }
+        return row;
     }
 
     /** 下一个门店编号序号：按既有编号最大值顺延（编号不复用；与主键 id 解耦，防删除后错位） */
