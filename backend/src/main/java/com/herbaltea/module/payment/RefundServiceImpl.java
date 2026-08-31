@@ -8,6 +8,7 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.infrastructure.web.UserContext;
+import com.herbaltea.module.marketing.MarketingService;
 import com.herbaltea.module.order.OrderStatus;
 import com.herbaltea.module.order.entity.Order;
 import com.herbaltea.module.order.mapper.OrderMapper;
@@ -71,6 +72,7 @@ public class RefundServiceImpl implements RefundService {
     private final ReturnOrderMapper returnOrderMapper;
     private final OrderMapper orderMapper;
     private final PaymentRecordMapper paymentRecordMapper;
+    private final MarketingService marketingService;
     private final StoreMapper storeMapper;
     private final UserMapper userMapper;
     private final OutboxPublisher outboxPublisher;
@@ -165,6 +167,12 @@ public class RefundServiceImpl implements RefundService {
                 ? RefundRecord.APPROVED_BY_STORE : RefundRecord.APPROVED_BY_HQ;
         refundRecordMapper.markApproved(refundId, level, approverAdminId);
         orderMapper.markRefundApproved(order.getId(), approverAdminId);
+
+        // v27：回收该订单已发放且未回收的积分（与结算冲正同事务；无待回收积分时 no-op）
+        long reclaimed = marketingService.reclaimPoints(order.getUserId(), order.getId(), order.getOrderNo());
+        if (reclaimed > 0) {
+            log.info("退款回收积分 orderNo={} points={}", order.getOrderNo(), reclaimed);
+        }
 
         // 退款审批通过事件（订阅：结算冲正）
         publishRefundEvent(OutboxEventType.refund_approved, rr);

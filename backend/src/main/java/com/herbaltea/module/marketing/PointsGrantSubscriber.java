@@ -40,9 +40,18 @@ public class PointsGrantSubscriber implements EventSubscriber {
             Long userId = node.get("userId").asLong();
             Long storeId = node.get("storeId").asLong();
             Long orderId = node.get("orderId").asLong();
+            String orderNo = node.has("orderNo") ? node.get("orderNo").asText() : String.valueOf(orderId);
+            // 发放数量取订单快照 points_earned（1 元 = 1 积分）；缺省时按实付金额兜底
+            int amount = node.has("pointsEarned")
+                    ? node.get("pointsEarned").asInt()
+                    : (int) node.get("payAmount").asDouble();
             // 平台活动商品 sourceType=2（平台补贴）；门店常规商品 sourceType=1（门店成本）
             int sourceType = node.has("platformActivity") && node.get("platformActivity").asBoolean() ? 2 : 1;
-            marketingService.grantPoints(userId, storeId, orderId, 10, sourceType);
+            if (amount <= 0) {
+                log.info("积分发放跳过（无可发放积分）orderNo={} pointsEarned={}", orderNo, amount);
+                return;
+            }
+            marketingService.grantPoints(userId, storeId, orderId, orderNo, amount, sourceType);
         } catch (Exception e) {
             throw new IllegalStateException("积分发放失败: " + event.getBizKey(), e);
         }

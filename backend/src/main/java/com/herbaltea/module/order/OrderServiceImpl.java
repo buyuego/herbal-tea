@@ -10,6 +10,7 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.idempotency.IdempotencyService;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
+import com.herbaltea.module.marketing.MarketingService;
 import com.herbaltea.module.order.dto.CreateOrderRequest;
 import com.herbaltea.module.order.dto.OrderCreateVO;
 import com.herbaltea.module.order.dto.OrderDetailVO;
@@ -35,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
@@ -65,6 +67,12 @@ public class OrderServiceImpl implements OrderService {
     /** 未支付关单窗口：30 分钟（16.12） */
     private static final long EXPIRE_MINUTES = 30;
 
+    /** 单积分抵扣金额（v27：与结算 POINTS_COST_UNIT 同口径，1 积分 = 0.01 元） */
+    private static final BigDecimal POINTS_DEDUCT_UNIT = new BigDecimal("0.01");
+
+    /** 积分来源：门店营销（D15；平台活动积分=2 待营销活动落地后按活动判定） */
+    private static final int POINTS_SOURCE_STORE = 1;
+
     private static final DateTimeFormatter NO_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final OrderMapper orderMapper;
@@ -73,6 +81,7 @@ public class OrderServiceImpl implements OrderService {
     private final PaymentRecordMapper paymentRecordMapper;
     private final UserAddressMapper userAddressMapper;
     private final ProductService productService;
+    private final MarketingService marketingService;
     private final OutboxPublisher outboxPublisher;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
@@ -111,25 +120,42 @@ public class OrderServiceImpl implements OrderService {
             throw new BizException("库存不足");
         }
 
-        // 5. 金额计算（优惠券/积分抵扣暂为 0，营销模块落地后接入）
+        // 5. 金额计算（v27：积分抵扣已接入营销模块；优惠券待营销活动落地）
         BigDecimal unitPrice = sku.price();
         BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(req.qty()));
-        BigDecimal payAmount = subtotal;
-        long pointsEarned = payAmount.longValueExact(); // 1 元 = 1 积分快照（D15 规则复核）
+
+        // 5.1 积分抵扣：订单号先生成（作为抵扣流水幂等键）→ 原子扣减 → 折算抵扣金额
+        String orderNo = generateNo("HT");
+        long usePoints = req.usePoints() == null ? 0L : Math.max(0, req.usePoints());
+        BigDecimal pointsDeductAmount = BigDecimal.ZERO;
+        if (usePoints > 0) {
+            pointsDeductAmount = BigDecimal.valueOf(usePoints)
+                    .multiply(POINTS_DEDUCT_UNIT)
+                    .setScale(2, RoundingMode.HALF_UP);
+            if (pointsDeductAmount.compareTo(subtotal) > 0) {
+                throw new BizException("抵扣积分超过订单金额：" + usePoints + " 积分可抵 ¥"
+                        + pointsDeductAmount + "，订单仅 ¥" + subtotal);
+            }
+            // 原子扣减（余额不足抛业务异常 → 下单事务整体回滚，库存一并还原）
+            marketingService.usePoints(userId, (int) usePoints, orderNo);
+        }
+        BigDecimal payAmount = subtotal.subtract(pointsDeductAmount).max(BigDecimal.ZERO);
+        // 赠送积分按「抵扣后实付」向下取整（1 元 = 1 积分，D15 规则复核）
+        long pointsEarned = payAmount.setScale(0, RoundingMode.DOWN).longValue();
 
         // 6. 订单头
         Order order = new Order();
-        order.setOrderNo(generateNo("HT"));
+        order.setOrderNo(orderNo);
         order.setUserId(userId);
         order.setStoreId(req.storeId());
         order.setStatus(Order.STATUS_PENDING_PAYMENT);
         order.setWarehouseStatus(Order.WH_READY);
         order.setTotalAmount(subtotal);
         order.setCouponAmount(BigDecimal.ZERO);
-        order.setPointsDeduct(0L);
-        order.setPointsDeductAmount(BigDecimal.ZERO);
+        order.setPointsDeduct(usePoints);
+        order.setPointsDeductAmount(pointsDeductAmount);
         order.setPointsEarned(pointsEarned);
-        order.setPointsSource(1);
+        order.setPointsSource(POINTS_SOURCE_STORE);
         order.setPayAmount(payAmount);
         order.setCommissionRate(DEFAULT_COMMISSION_RATE);
         order.setReceiverName(addr.getReceiverName());
