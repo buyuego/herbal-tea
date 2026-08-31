@@ -27,7 +27,7 @@ import requests
 
 BASE = "http://localhost:8080"
 PW = "Store@123456"
-ADMIN_PW = "QVMWb_-_mr%+gb4D"
+ADMIN_PW = "Admin@123456"
 TEST_BIZ_PREFIX = "DR-"  # 测试缴纳流水 biz_no 前缀（清理用）
 
 passed = 0

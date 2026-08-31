@@ -49,6 +49,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '结算管理', icon: 'Money', perm: 'menu:settlement' },
       },
       {
+        path: 'deposit',
+        name: 'deposit',
+        component: () => import('@/views/deposit/index.vue'),
+        meta: { title: '保证金管理', icon: 'Wallet', perm: 'store:deposit:confirm' },
+      },
+      {
         path: 'stores',
         name: 'stores',
         component: () => import('@/views/stores/index.vue'),
