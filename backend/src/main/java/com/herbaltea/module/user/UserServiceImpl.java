@@ -2,11 +2,18 @@ package com.herbaltea.module.user;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.security.JwtUtil;
 import com.herbaltea.infrastructure.web.AuthInterceptor;
+import com.herbaltea.module.marketing.MarketingService;
+import com.herbaltea.module.marketing.dto.PointRecordVO;
 import com.herbaltea.module.user.dto.AddressRequest;
+import com.herbaltea.module.user.dto.MemberDetailVO;
+import com.herbaltea.module.user.dto.MemberQuery;
+import com.herbaltea.module.user.dto.MemberVO;
 import com.herbaltea.module.user.dto.UserLoginVO;
 import com.herbaltea.module.user.dto.UserProfileVO;
 import com.herbaltea.module.user.dto.WxLoginRequest;
@@ -54,6 +61,7 @@ public class UserServiceImpl implements UserService {
 
     private final UserMapper userMapper;
     private final UserAddressMapper userAddressMapper;
+    private final MarketingService marketingService;
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redis;
     private final AuthInterceptor authInterceptor;
@@ -215,6 +223,87 @@ public class UserServiceImpl implements UserService {
     public void deleteAddress(Long userId, Long addressId) {
         UserAddress existing = owned(userId, addressId);
         userAddressMapper.deleteById(existing.getId());
+    }
+
+    // ==================== B 端会员管理（v26） ====================
+
+    @Override
+    public IPage<MemberVO> pageMembers(MemberQuery query) {
+        MemberQuery q = query == null ? new MemberQuery() : query;
+        if (q.getPage() <= 0) {
+            q.setPage(1);
+        }
+        if (q.getSize() <= 0) {
+            q.setSize(10);
+        }
+        if (q.getSize() > 100) {
+            q.setSize(100);
+        }
+        IPage<MemberVO> page = userMapper.pageMembers(new Page<>(q.getPage(), q.getSize()), q);
+        // 手机号脱敏：138****1234（B 端同样不暴露完整手机号）
+        page.getRecords().forEach(UserServiceImpl::maskPhone);
+        return page;
+    }
+
+    @Override
+    public MemberDetailVO getMemberDetail(Long userId) {
+        MemberVO member = userMapper.selectMemberVO(userId);
+        if (member == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "会员不存在");
+        }
+        maskPhone(member);
+
+        List<UserAddress> addresses = userAddressMapper.selectList(
+                new LambdaQueryWrapper<UserAddress>()
+                        .eq(UserAddress::getUserId, userId)
+                        .orderByDesc(UserAddress::getIsDefault)
+                        .orderByAsc(UserAddress::getId));
+
+        // 积分流水属营销模块，跨模块走 Service 只读接口（模块边界约束）
+        List<PointRecordVO> records = marketingService
+                .pagePointRecords(userId, null, 1, 20)
+                .getRecords();
+
+        MemberDetailVO vo = new MemberDetailVO();
+        vo.setMember(member);
+        vo.setAddresses(addresses);
+        vo.setPointRecords(records);
+        return vo;
+    }
+
+    @Override
+    @Transactional
+    public void updateMemberStatus(Long userId, Integer status) {
+        if (!Integer.valueOf(User.STATUS_DISABLED).equals(status)
+                && !Integer.valueOf(User.STATUS_ENABLED).equals(status)) {
+            throw new BizException("状态不合法：0禁用 / 1正常");
+        }
+        User user = userMapper.selectById(userId);
+        if (user == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "会员不存在");
+        }
+        if (status.equals(user.getStatus())) {
+            throw new BizException(ResultCode.CONFLICT, "会员已处于该状态");
+        }
+
+        User update = new User();
+        update.setId(userId);
+        update.setStatus(status);
+        userMapper.updateById(update);
+
+        // R9：禁用即时吊销其全部已签发 JWT（token_version +1），启用不吊销
+        if (Integer.valueOf(User.STATUS_DISABLED).equals(status)) {
+            userMapper.bumpTokenVersion(userId);
+        }
+        log.info("会员状态变更 userId={} {} → {} operator", userId, user.getStatus(), status);
+    }
+
+    /** 手机号脱敏（11 位手机号 → 138****1234；非 11 位原样返回） */
+    private static void maskPhone(MemberVO vo) {
+        String phone = vo.getPhone();
+        if (phone != null && phone.length() == 11) {
+            vo.setPhone(phone.substring(0, 3) + "****" + phone.substring(7));
+        }
     }
 
     // ===== 私有方法 =====

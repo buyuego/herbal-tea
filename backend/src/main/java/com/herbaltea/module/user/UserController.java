@@ -1,8 +1,14 @@
 package com.herbaltea.module.user;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.common.result.Result;
+import com.herbaltea.infrastructure.audit.AuditLog;
+import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.user.dto.AddressRequest;
+import com.herbaltea.module.user.dto.MemberDetailVO;
+import com.herbaltea.module.user.dto.MemberQuery;
+import com.herbaltea.module.user.dto.MemberVO;
 import com.herbaltea.module.user.dto.UserLoginVO;
 import com.herbaltea.module.user.dto.UserProfileVO;
 import com.herbaltea.module.user.dto.WxLoginRequest;
@@ -12,14 +18,17 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -101,6 +110,32 @@ public class UserController {
     @DeleteMapping("/addresses/{id}")
     public Result<Void> deleteAddress(@PathVariable Long id) {
         userService.deleteAddress(UserContext.userId(), id);
+        return Result.ok();
+    }
+
+    // ==================== B 端会员管理（v26） ====================
+
+    @Operation(summary = "会员分页", description = "users × 积分账户 × 订单聚合；关键词匹配昵称/手机号/openid；手机号脱敏返回")
+    @GetMapping("/admin/members")
+    @RequirePermission("menu:member")
+    public Result<IPage<MemberVO>> pageMembers(@ModelAttribute MemberQuery query) {
+        return Result.ok(userService.pageMembers(query));
+    }
+
+    @Operation(summary = "会员详情", description = "概览（积分余额/订单统计）+ 收货地址 + 最近 20 条积分流水")
+    @GetMapping("/admin/members/{id}")
+    @RequirePermission("menu:member")
+    public Result<MemberDetailVO> getMemberDetail(@PathVariable Long id) {
+        return Result.ok(userService.getMemberDetail(id));
+    }
+
+    @Operation(summary = "会员启停", description = "0禁用 / 1正常；禁用时 token_version +1 即时吊销其已签发 JWT（R9）")
+    @PutMapping("/admin/members/{id}/status")
+    @RequirePermission("member:edit")
+    @AuditLog(action = "会员启停")
+    public Result<Void> updateMemberStatus(@PathVariable Long id,
+                                           @RequestParam @NotNull Integer status) {
+        userService.updateMemberStatus(id, status);
         return Result.ok();
     }
 

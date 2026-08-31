@@ -1,6 +1,10 @@
 package com.herbaltea.module.user;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.module.user.dto.AddressRequest;
+import com.herbaltea.module.user.dto.MemberDetailVO;
+import com.herbaltea.module.user.dto.MemberQuery;
+import com.herbaltea.module.user.dto.MemberVO;
 import com.herbaltea.module.user.dto.UserLoginVO;
 import com.herbaltea.module.user.dto.UserProfileVO;
 import com.herbaltea.module.user.dto.WxLoginRequest;
@@ -44,4 +48,17 @@ public interface UserService {
     UserAddress updateAddress(Long userId, Long addressId, AddressRequest req);
 
     void deleteAddress(Long userId, Long addressId);
+
+    // ===== B 端会员管理（v26，menu:member 109 / member:edit 220） =====
+
+    /**
+     * 会员分页（B 端）：users × 积分账户 × 订单聚合（仅统计已支付及之后的有效订单）
+     */
+    IPage<MemberVO> pageMembers(MemberQuery query);
+
+    /** 会员详情：概览 + 收货地址 + 最近 20 条积分流水 */
+    MemberDetailVO getMemberDetail(Long userId);
+
+    /** 会员启停（0禁用 / 1正常）；禁用同时 token_version +1 即时吊销其 JWT（R9） */
+    void updateMemberStatus(Long userId, Integer status);
 }

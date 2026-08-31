@@ -1,5 +1,8 @@
 package com.herbaltea.module.marketing;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.herbaltea.module.marketing.dto.PointRecordVO;
+
 /**
  * 营销模块（promotions / coupons / user_coupons / point_records / banners）
  *
@@ -24,4 +27,9 @@ public interface MarketingService {
 
     /** 积分抵扣下单（校验余额 + 原子扣减） */
     void usePoints(Long userId, int amount);
+
+    /**
+     * 会员积分流水分页（v26：B 端会员详情展示；跨模块只读入口，changeType 为 null 查全部）
+     */
+    IPage<PointRecordVO> pagePointRecords(Long userId, Integer changeType, long page, long size);
 }

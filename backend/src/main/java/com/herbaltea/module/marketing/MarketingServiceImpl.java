@@ -1,10 +1,18 @@
 package com.herbaltea.module.marketing;
 
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.herbaltea.common.exception.BizException;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
+import com.herbaltea.module.marketing.dto.PointRecordVO;
+import com.herbaltea.module.marketing.entity.PointRecord;
+import com.herbaltea.module.marketing.mapper.PointRecordMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+
+import java.util.Map;
 
 /**
  * 营销模块骨架实现
@@ -22,7 +30,22 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class MarketingServiceImpl implements MarketingService {
 
+    /** 变动类型文案（与 PointRecord.TYPE_* 对齐） */
+    private static final Map<Integer, String> CHANGE_TYPE_DESC = Map.of(
+            PointRecord.TYPE_GRANT, "下单发放",
+            PointRecord.TYPE_USE, "下单抵扣",
+            PointRecord.TYPE_REFUND_RECLAIM, "退款回收",
+            PointRecord.TYPE_EXPIRE, "过期清零",
+            PointRecord.TYPE_SIGN_IN, "签到");
+
+    /** 积分来源文案（D15 双维归属） */
+    private static final Map<Integer, String> SOURCE_TYPE_DESC = Map.of(
+            PointRecord.SOURCE_STORE, "门店营销",
+            PointRecord.SOURCE_PLATFORM, "平台活动");
+
     private final OutboxPublisher outboxPublisher;
+
+    private final PointRecordMapper pointRecordMapper;
 
     @Override
     public void grantPoints(Long userId, Long storeId, Long orderId, int amount, Integer sourceType) {
@@ -42,5 +65,21 @@ public class MarketingServiceImpl implements MarketingService {
     public void usePoints(Long userId, int amount) {
         // TODO: UPDATE user_points_accounts SET balance = balance - #{amount}
         //       WHERE user_id = ? AND balance >= #{amount}（原子扣减，16.4 同款）
+    }
+
+    @Override
+    public IPage<PointRecordVO> pagePointRecords(Long userId, Integer changeType, long page, long size) {
+        if (changeType != null && !CHANGE_TYPE_DESC.containsKey(changeType)) {
+            throw new BizException("积分变动类型不合法：1发放 / 2抵扣 / 3退款回收 / 4过期清零 / 5签到");
+        }
+        long p = page <= 0 ? 1 : page;
+        long s = Math.min(size <= 0 ? 10 : size, 100);
+        IPage<PointRecordVO> result = pointRecordMapper.pageByUser(new Page<>(p, s), userId, changeType);
+        // 文案由服务端填充，前端直接展示
+        result.getRecords().forEach(r -> {
+            r.setChangeTypeDesc(CHANGE_TYPE_DESC.getOrDefault(r.getChangeType(), "#" + r.getChangeType()));
+            r.setSourceTypeDesc(SOURCE_TYPE_DESC.getOrDefault(r.getSourceType(), "#" + r.getSourceType()));
+        });
+        return result;
     }
 }
