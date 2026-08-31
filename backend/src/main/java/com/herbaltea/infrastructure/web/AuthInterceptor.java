@@ -100,6 +100,9 @@ public class AuthInterceptor implements HandlerInterceptor {
             ctx.setAdminId(userId);
             Object sid = claims.get("sid");
             ctx.setStoreId(sid == null ? 0L : Long.valueOf(String.valueOf(sid)));
+            // roleId 取 JWT r claim（RBAC 权限码校验，PermissionInterceptor）
+            Object rid = claims.get("r");
+            ctx.setRoleId(rid == null ? null : Long.valueOf(String.valueOf(rid)));
         }
         ctx.setSessionId(JwtUtil.sessionId(claims));
         UserContext.set(ctx);

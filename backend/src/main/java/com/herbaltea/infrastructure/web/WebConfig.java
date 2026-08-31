@@ -12,6 +12,7 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  * <ol>
  *   <li>RequestLogInterceptor —— 日志 / traceId</li>
  *   <li>AuthInterceptor —— JWT 鉴权 + token_version 即时吊销（R9/D12）</li>
+ *   <li>PermissionInterceptor —— RBAC 权限码校验（@RequirePermission，15.1）</li>
  *   <li>DataScopeInterceptor —— 数据权限范围注入（防越权首道拦截）</li>
  *   <li>RateLimitInterceptor —— 限流</li>
  * </ol>
@@ -24,6 +25,7 @@ public class WebConfig implements WebMvcConfigurer {
 
     private final RequestLogInterceptor requestLogInterceptor;
     private final AuthInterceptor authInterceptor;
+    private final PermissionInterceptor permissionInterceptor;
     private final DataScopeInterceptor dataScopeInterceptor;
     private final RateLimitInterceptor rateLimitInterceptor;
 
@@ -31,6 +33,7 @@ public class WebConfig implements WebMvcConfigurer {
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(requestLogInterceptor).addPathPatterns("/api/**");
         registry.addInterceptor(authInterceptor).addPathPatterns("/api/**");
+        registry.addInterceptor(permissionInterceptor).addPathPatterns("/api/**");
         registry.addInterceptor(dataScopeInterceptor).addPathPatterns("/api/**");
         registry.addInterceptor(rateLimitInterceptor).addPathPatterns("/api/**");
     }

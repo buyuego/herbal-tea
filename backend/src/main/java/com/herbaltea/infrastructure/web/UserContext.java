@@ -26,6 +26,9 @@ public class UserContext {
     /** B 端：所属店铺 id（总部为 0，门店管理员为对应 store_id） */
     private Long storeId;
 
+    /** B 端：角色 id（admin_users.role_id，JWT claim "r"，RBAC 权限码校验依据） */
+    private Long roleId;
+
     /** B 端：数据范围（ALL=总部全量 / STORE=本店 / SELF=本人），由 Data Scope 拦截器转 SQL 条件 */
     private String dataScope;
 

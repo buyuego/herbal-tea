@@ -3,6 +3,7 @@ package com.herbaltea.module.order;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.common.result.Result;
 import com.herbaltea.infrastructure.audit.AuditLog;
+import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.order.dto.CreateOrderRequest;
 import com.herbaltea.module.order.dto.OrderCreateVO;
@@ -44,12 +45,14 @@ public class OrderController {
 
     @Operation(summary = "订单分页查询", description = "订单号精确 / 用户 / 门店 / 状态过滤")
     @GetMapping("/admin/page")
+    @RequirePermission("menu:order")
     public Result<IPage<Order>> page(OrderPageQuery query) {
         return Result.ok(orderService.pageOrders(query));
     }
 
     @Operation(summary = "订单详情", description = "订单头 + 明细 + 支付单 + 规格 JSON 解析")
     @GetMapping("/admin/{orderId}")
+    @RequirePermission("menu:order")
     public Result<OrderDetailVO> detail(@PathVariable Long orderId) {
         return Result.ok(orderService.getOrderDetail(orderId));
     }
@@ -57,6 +60,7 @@ public class OrderController {
     @Operation(summary = "代客下单", description = "门店/总部为会员下单（order:create:behalf），"
             + "Idempotency-Key 请求头必填（24h 防重），库存原子扣减，返回收银台参数")
     @PostMapping("/admin/behalf")
+    @RequirePermission("order:create:behalf")
     @AuditLog(action = "代客下单")
     public Result<OrderCreateVO> createForUser(
             @Valid @RequestBody CreateOrderRequest req,
@@ -71,6 +75,7 @@ public class OrderController {
 
     @Operation(summary = "订单发货", description = "30待发货→40已发货，写物流单+轨迹日志（order:ship）")
     @PostMapping("/admin/{orderId}/ship")
+    @RequirePermission("order:ship")
     @AuditLog(action = "订单发货")
     public Result<Void> ship(@PathVariable Long orderId, @Valid @RequestBody ShipRequest req) {
         orderService.ship(orderId, UserContext.get().getAdminId(), req);
@@ -79,6 +84,7 @@ public class OrderController {
 
     @Operation(summary = "物流轨迹", description = "订单全部物流日志（时间升序）")
     @GetMapping("/admin/{orderId}/shipping-logs")
+    @RequirePermission("menu:order")
     public Result<List<OrderShippingLog>> shippingLogs(@PathVariable Long orderId) {
         return Result.ok(orderService.shippingLogs(orderId));
     }

@@ -43,29 +43,41 @@ public class JwtUtil {
     /** 签发访问令牌 */
     public String createAccessToken(Long userId, String principalType,
                                     String sessionId, Long tokenVersion) {
-        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", null);
+        return createAccessToken(userId, principalType, sessionId, tokenVersion, null, null);
     }
 
     /** 签发访问令牌（B 端门店管理员：附加主店 storeId claim "sid"，AuthInterceptor 据此填充 Data Scope） */
     public String createAccessToken(Long userId, String principalType,
                                     String sessionId, Long tokenVersion, Long storeId) {
-        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", storeId);
+        return createAccessToken(userId, principalType, sessionId, tokenVersion, storeId, null);
+    }
+
+    /** 签发访问令牌（B 端全参：storeId claim "sid" + roleId claim "r"，RBAC 权限码校验依据） */
+    public String createAccessToken(Long userId, String principalType,
+                                    String sessionId, Long tokenVersion, Long storeId, Long roleId) {
+        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", storeId, roleId);
     }
 
     /** 签发刷新令牌 */
     public String createRefreshToken(Long userId, String principalType,
                                      String sessionId, Long tokenVersion) {
-        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", null);
+        return createRefreshToken(userId, principalType, sessionId, tokenVersion, null, null);
     }
 
     /** 签发刷新令牌（B 端门店管理员：附加主店 storeId claim "sid"） */
     public String createRefreshToken(Long userId, String principalType,
                                      String sessionId, Long tokenVersion, Long storeId) {
-        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", storeId);
+        return createRefreshToken(userId, principalType, sessionId, tokenVersion, storeId, null);
+    }
+
+    /** 签发刷新令牌（B 端全参：storeId claim "sid" + roleId claim "r"） */
+    public String createRefreshToken(Long userId, String principalType,
+                                     String sessionId, Long tokenVersion, Long storeId, Long roleId) {
+        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", storeId, roleId);
     }
 
     private String create(Long userId, String principalType, String sessionId,
-                          Long tokenVersion, Duration ttl, String kind, Long storeId) {
+                          Long tokenVersion, Duration ttl, String kind, Long storeId, Long roleId) {
         Date now = new Date();
         var builder = Jwts.builder()
                 .id(sessionId)
@@ -78,6 +90,9 @@ public class JwtUtil {
                 .signWith(key);
         if (storeId != null && storeId > 0) {
             builder.claim("sid", storeId);
+        }
+        if (roleId != null) {
+            builder.claim("r", roleId);
         }
         return builder.compact();
     }

@@ -3,6 +3,7 @@ package com.herbaltea.module.product;
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.common.result.Result;
 import com.herbaltea.infrastructure.audit.AuditLog;
+import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.product.dto.CategoryCreateRequest;
 import com.herbaltea.module.product.dto.ProductCreateRequest;
@@ -63,6 +64,7 @@ public class ProductController {
 
     @Operation(summary = "创建分类", description = "总部维护平台分类")
     @PostMapping("/categories")
+    @RequirePermission("product:edit")
     @AuditLog(action = "创建商品分类")
     public Result<Long> createCategory(@Valid @RequestBody CategoryCreateRequest req) {
         return Result.ok(productService.createCategory(req));
@@ -70,6 +72,7 @@ public class ProductController {
 
     @Operation(summary = "分类启停用", description = "0停用 / 1启用")
     @PutMapping("/categories/{id}/status")
+    @RequirePermission("product:edit")
     @AuditLog(action = "分类启停用")
     public Result<Void> updateCategoryStatus(@PathVariable Long id,
                                              @RequestParam @NotNull Integer status) {
@@ -81,6 +84,7 @@ public class ProductController {
 
     @Operation(summary = "创建平台商品", description = "商品头 + 初始 SKU 列表（事务）；SKU 编码全局唯一")
     @PostMapping("/admin/products")
+    @RequirePermission("product:edit")
     @AuditLog(action = "创建平台商品")
     public Result<Long> createProduct(@Valid @RequestBody ProductCreateRequest req) {
         return Result.ok(productService.createProduct(req));
@@ -88,18 +92,21 @@ public class ProductController {
 
     @Operation(summary = "商品目录分页", description = "keyword 模糊（名称/副标题）/ 分类 / 状态过滤")
     @GetMapping("/admin/products")
+    @RequirePermission("menu:product")
     public Result<IPage<Product>> pageProducts(@ModelAttribute ProductPageQuery query) {
         return Result.ok(productService.pageProducts(query));
     }
 
     @Operation(summary = "商品详情", description = "含 SKU 列表；cost_price 为敏感字段（product:cost:view 权限）")
     @GetMapping("/admin/products/{id}")
+    @RequirePermission("menu:product")
     public Result<ProductDetailVO> getProductDetail(@PathVariable Long id) {
         return Result.ok(productService.getProductDetail(id));
     }
 
     @Operation(summary = "更新商品目录", description = "D14：更新目录 + 标记本店 catalog_dirty=1 + 发布 catalog_changed 事件（不覆盖本店定价）")
     @PutMapping("/admin/products/{id}")
+    @RequirePermission("product:edit")
     @AuditLog(action = "更新平台商品目录")
     public Result<Void> updateCatalog(@PathVariable Long id,
                                       @Valid @RequestBody ProductUpdateRequest req) {
@@ -109,6 +116,7 @@ public class ProductController {
 
     @Operation(summary = "商品上下架（目录层）", description = "0下架 / 1在售")
     @PutMapping("/admin/products/{id}/status")
+    @RequirePermission("product:edit")
     @AuditLog(action = "商品上下架")
     public Result<Void> updateProductStatus(@PathVariable Long id,
                                             @RequestParam @NotNull Integer status) {
@@ -118,6 +126,7 @@ public class ProductController {
 
     @Operation(summary = "追加 SKU", description = "sku_code 全局唯一，冲突返回 40900")
     @PostMapping("/admin/products/{id}/skus")
+    @RequirePermission("product:edit")
     @AuditLog(action = "追加 SKU")
     public Result<Long> addSku(@PathVariable Long id, @Valid @RequestBody SkuAddRequest req) {
         return Result.ok(productService.addSku(id, req));
@@ -125,6 +134,7 @@ public class ProductController {
 
     @Operation(summary = "SKU 启停用", description = "0停用 / 1启用")
     @PutMapping("/admin/skus/{id}/status")
+    @RequirePermission("product:edit")
     @AuditLog(action = "SKU 启停用")
     public Result<Void> updateSkuStatus(@PathVariable Long id,
                                         @RequestParam @NotNull Integer status) {
@@ -136,6 +146,7 @@ public class ProductController {
 
     @Operation(summary = "库存调整", description = "入库(changeType=1，qty 为正) / 盘点(changeType=3，qty 为实际差值)；行锁 + 乐观锁 + 落流水")
     @PostMapping("/inventory/adjust")
+    @RequirePermission("inventory:manage")
     @AuditLog(action = "库存调整")
     public Result<Void> adjustStock(@Valid @RequestBody StockAdjustRequest req) {
         productService.adjustStock(req, UserContext.get().getAdminId());
@@ -144,6 +155,7 @@ public class ProductController {
 
     @Operation(summary = "库存流水分页", description = "按 SKU / 关联单号过滤（出库流水由订单扣减写入）")
     @GetMapping("/inventory/records")
+    @RequirePermission("inventory:manage")
     public Result<IPage<InventoryRecord>> pageInventoryRecords(
             @RequestParam(required = false) Long skuId,
             @RequestParam(required = false) String bizNo,
@@ -156,6 +168,7 @@ public class ProductController {
 
     @Operation(summary = "本店上架", description = "定价须在平台建议价 80%-120%；storeId 取自登录上下文（总部账号拒绝）")
     @PostMapping("/store/listings")
+    @RequirePermission("product:edit")
     @AuditLog(action = "本店上架")
     public Result<Long> createStoreProduct(@Valid @RequestBody StoreListingRequest req) {
         return Result.ok(productService.createStoreProduct(UserContext.storeId(), req));
@@ -163,6 +176,7 @@ public class ProductController {
 
     @Operation(summary = "本店改价", description = "同样校验 80%-120% 区间")
     @PutMapping("/store/listings/{id}/price")
+    @RequirePermission("product:edit")
     @AuditLog(action = "本店改价")
     public Result<Void> updateStorePrice(@PathVariable Long id,
                                          @Valid @RequestBody StorePriceRequest req) {
@@ -172,6 +186,7 @@ public class ProductController {
 
     @Operation(summary = "本店上下架开关", description = "0下架 / 1上架；不被目录变更覆盖（D14）")
     @PutMapping("/store/listings/{id}/status")
+    @RequirePermission("product:edit")
     @AuditLog(action = "本店上下架")
     public Result<Void> updateStoreProductStatus(@PathVariable Long id,
                                                  @RequestParam @NotNull Integer status) {
@@ -181,6 +196,7 @@ public class ProductController {
 
     @Operation(summary = "本店上架列表", description = "联查商品/SKU 展示信息；catalog_dirty=1 表示目录已更新待复核")
     @GetMapping("/store/listings")
+    @RequirePermission("menu:product")
     public Result<List<StoreProductVO>> listStoreProducts(
             @RequestParam(required = false) Integer status) {
         return Result.ok(productService.listStoreProducts(UserContext.storeId(), status));

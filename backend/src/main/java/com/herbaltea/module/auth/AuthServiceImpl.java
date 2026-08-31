@@ -5,11 +5,13 @@ import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.security.JwtUtil;
 import com.herbaltea.infrastructure.web.AuthInterceptor;
+import com.herbaltea.infrastructure.web.PermissionInterceptor;
 import com.herbaltea.infrastructure.web.RateLimitInterceptor;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.auth.entity.AdminUser;
 import com.herbaltea.module.auth.mapper.AdminUserMapper;
 import com.herbaltea.module.auth.mapper.DeviceTrustMapper;
+import com.herbaltea.module.auth.mapper.PermissionMapper;
 import com.herbaltea.module.store.StoreService;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PostConstruct;
@@ -23,6 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -43,16 +49,22 @@ public class AuthServiceImpl implements AuthService {
     /** 刷新令牌会话存储（D12 轮换）：refresh:session:{jti} → ADMIN:{adminId} */
     private static final String REFRESH_SESSION_PREFIX = "refresh:session:";
 
+    /** 角色权限码缓存（RBAC）：rbac:perms:{roleId} → 逗号分隔 code 集合，TTL 5 分钟 */
+    private static final String RBAC_PERMS_PREFIX = "rbac:perms:";
+    private static final Duration RBAC_PERMS_TTL = Duration.ofMinutes(5);
+
     /** 不存在用户的假哈希：执行相同 BCrypt 成本，防用户名时序枚举 */
     private static final String DUMMY_HASH = "$2a$10$7EqJtq98hPqEX7fNZaFWoOhi6X8H5QoYb7m8vZzU5pC1k3yY6nW4S";
 
     private final AdminUserMapper adminUserMapper;
     private final DeviceTrustMapper deviceTrustMapper;
+    private final PermissionMapper permissionMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redis;
     private final RateLimitInterceptor rateLimit;
     private final AuthInterceptor authInterceptor;
+    private final PermissionInterceptor permissionInterceptor;
     private final StoreService storeService;
 
     @Value("${app.jwt.refresh-token-ttl:30d}")
@@ -68,6 +80,30 @@ public class AuthServiceImpl implements AuthService {
                             .eq(AdminUser::getId, userId));
             return admin == null ? null : (long) admin.getTokenVersion();
         });
+    }
+
+    /** RBAC 权限校验器：注入权限拦截器，ADMIN 按角色权限码校验（role_permissions + Redis 缓存） */
+    @PostConstruct
+    void wirePermissionChecker() {
+        permissionInterceptor.registerProvider("ADMIN", (roleId, code) -> {
+            if (roleId == null) {
+                return false;
+            }
+            Set<String> codes = permissionCodesOfRole(roleId);
+            return codes.contains(code);
+        });
+    }
+
+    /** 角色权限码集合：Redis 缓存（5min）→ DB 兜底回填 */
+    private Set<String> permissionCodesOfRole(Long roleId) {
+        String key = RBAC_PERMS_PREFIX + roleId;
+        String cached = redis.opsForValue().get(key);
+        if (cached != null) {
+            return cached.isEmpty() ? Set.of() : new HashSet<>(Arrays.asList(cached.split(",")));
+        }
+        List<String> list = permissionMapper.selectCodesByRoleId(roleId);
+        redis.opsForValue().set(key, String.join(",", list), RBAC_PERMS_TTL);
+        return new HashSet<>(list);
     }
 
     @Override
@@ -93,7 +129,8 @@ public class AuthServiceImpl implements AuthService {
                 .eq(AdminUser::getId, admin.getId())
                 .set(AdminUser::getLastLoginAt, LocalDateTime.now()));
         log.info("管理员 {} 登录成功", admin.getUsername());
-        return issueTokenPair(admin.getId(), "ADMIN", admin.getTokenVersion(), storeService.storeIdOfAdmin(admin.getId()));
+        return issueTokenPair(admin.getId(), "ADMIN", admin.getTokenVersion(),
+                storeService.storeIdOfAdmin(admin.getId()), admin.getRoleId());
     }
 
     @Override
@@ -113,17 +150,18 @@ public class AuthServiceImpl implements AuthService {
         // 吊销兜底：刷新时仍比对 token_version（R9）
         AdminUser admin = adminUserMapper.selectOne(
                 new LambdaQueryWrapper<AdminUser>()
-                        .select(AdminUser::getTokenVersion, AdminUser::getStatus)
+                        .select(AdminUser::getTokenVersion, AdminUser::getStatus, AdminUser::getRoleId)
                         .eq(AdminUser::getId, adminId));
         if (admin == null || admin.getStatus() != AdminUser.STATUS_ENABLED
                 || admin.getTokenVersion() != JwtUtil.tokenVersion(claims).intValue()) {
             redis.delete(REFRESH_SESSION_PREFIX + jti);
             throw new BizException(ResultCode.TOKEN_REVOKED, "登录已失效，请重新登录");
         }
-        // 轮换：旧 jti 作废，签发新双令牌（主店重新查询，支持调店后刷新生效）
+        // 轮换：旧 jti 作废，签发新双令牌（主店/角色重新查询，支持调店/调岗后刷新生效）
         redis.delete(REFRESH_SESSION_PREFIX + jti);
         log.info("管理员 {} 刷新令牌已轮换", adminId);
-        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(), storeService.storeIdOfAdmin(adminId));
+        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(),
+                storeService.storeIdOfAdmin(adminId), admin.getRoleId());
     }
 
     @Override
@@ -140,11 +178,11 @@ public class AuthServiceImpl implements AuthService {
     }
 
     /** 签发双令牌（访问 2h + 刷新 30d），刷新会话写入 Redis 供轮换校验；storeId 为门店管理员主店（总部传 null） */
-    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion, Long storeId) {
+    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion, Long storeId, Long roleId) {
         String sessionId = UUID.randomUUID().toString().replace("-", "");
         long ver = tokenVersion == null ? 0L : tokenVersion;
-        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver, storeId);
-        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver, storeId);
+        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver, storeId, roleId);
+        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver, storeId, roleId);
         // 刷新会话：TTL 与刷新令牌一致（30d），吊销时 token_version 兜底
         redis.opsForValue().set(REFRESH_SESSION_PREFIX + sessionId,
                 principalType + ":" + adminId, refreshTtl);
