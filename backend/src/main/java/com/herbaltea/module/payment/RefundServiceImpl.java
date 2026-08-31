@@ -8,6 +8,7 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.infrastructure.web.UserContext;
+import com.herbaltea.module.marketing.CouponService;
 import com.herbaltea.module.marketing.MarketingService;
 import com.herbaltea.module.order.OrderStatus;
 import com.herbaltea.module.order.entity.Order;
@@ -73,6 +74,7 @@ public class RefundServiceImpl implements RefundService {
     private final OrderMapper orderMapper;
     private final PaymentRecordMapper paymentRecordMapper;
     private final MarketingService marketingService;
+    private final CouponService couponService;
     private final StoreMapper storeMapper;
     private final UserMapper userMapper;
     private final OutboxPublisher outboxPublisher;
@@ -172,6 +174,11 @@ public class RefundServiceImpl implements RefundService {
         long reclaimed = marketingService.reclaimPoints(order.getUserId(), order.getId(), order.getOrderNo());
         if (reclaimed > 0) {
             log.info("退款回收积分 orderNo={} points={}", order.getOrderNo(), reclaimed);
+        }
+        // v28：退回该订单已核销的券（置为「退款退回」）
+        int refundedCoupons = couponService.refundCoupons(order.getId());
+        if (refundedCoupons > 0) {
+            log.info("退款退回券 orderNo={} count={}", order.getOrderNo(), refundedCoupons);
         }
 
         // 退款审批通过事件（订阅：结算冲正）

@@ -77,6 +77,8 @@ export interface SettlementDetail {
   pointsCostStore: string
   pointsCostPlatform: string
   couponCostStore: string
+  /** 平台券补贴（v28，平台承担，不计入店铺应付） */
+  couponCostPlatform: string
   refundAdjust: string
   adjustAmount: string
   finalAmount: string

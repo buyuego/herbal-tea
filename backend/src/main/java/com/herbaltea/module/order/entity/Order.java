@@ -77,6 +77,9 @@ public class Order extends BaseEntity {
     /** 优惠券抵扣 */
     private BigDecimal couponAmount;
 
+    /** 券归属：0无券 / 1平台券（平台承担）/ 2本店券（店铺承担）（v28，V14 补列） */
+    private Integer couponScope;
+
     /** 积分抵扣数量 */
     private Long pointsDeduct;
 

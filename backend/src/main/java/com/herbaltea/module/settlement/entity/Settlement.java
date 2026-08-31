@@ -66,6 +66,9 @@ public class Settlement extends BaseEntity {
     /** 本店券成本 */
     private BigDecimal couponCostStore;
 
+    /** 平台券补贴（v28，平台承担，不从店铺扣减） */
+    private BigDecimal couponCostPlatform;
+
     /** 退款冲正 */
     private BigDecimal refundAdjust;
 

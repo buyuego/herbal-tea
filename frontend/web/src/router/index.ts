@@ -79,6 +79,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '会员管理', icon: 'UserFilled', perm: 'menu:member' },
       },
       {
+        path: 'coupon',
+        name: 'coupon',
+        component: () => import('@/views/coupon/index.vue'),
+        meta: { title: '优惠券管理', icon: 'Ticket', perm: 'menu:marketing' },
+      },
+      {
         path: 'roles',
         name: 'roles',
         component: () => import('@/views/roles/index.vue'),

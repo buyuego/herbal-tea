@@ -152,7 +152,7 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             <script>
             SELECT o.id, o.order_no, o.store_id, o.total_amount, o.pay_amount,
                    o.points_deduct_amount, o.points_earned, o.points_source,
-                   o.coupon_amount, o.commission_rate, o.finished_at
+                   o.coupon_amount, o.coupon_scope, o.commission_rate, o.finished_at
             FROM orders o
             WHERE o.store_id = #{storeId} AND o.status = 90
               AND NOT EXISTS (
@@ -231,6 +231,8 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
         private java.lang.Long pointsEarned;
         private java.lang.Integer pointsSource;
         private java.math.BigDecimal couponAmount;
+        /** 券归属：0无券 / 1平台券 / 2本店券（v28） */
+        private java.lang.Integer couponScope;
         private java.math.BigDecimal commissionRate;
         private java.time.LocalDateTime finishedAt;
     }

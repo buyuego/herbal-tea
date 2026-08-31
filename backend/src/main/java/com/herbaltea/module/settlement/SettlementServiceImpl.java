@@ -46,6 +46,9 @@ public class SettlementServiceImpl implements SettlementService {
     private static final int POINTS_SOURCE_STORE = 1;
     /** 积分来源：平台活动 */
     private static final int POINTS_SOURCE_PLATFORM = 2;
+
+    /** 券归属：平台券（v28，平台承担成本） */
+    private static final int COUPON_SCOPE_PLATFORM = 1;
     /** 积分成本单价：1 积分 = 0.01 元（营销成本估算，TODO 接营销模块精确成本） */
     private static final BigDecimal POINTS_COST_UNIT = new BigDecimal("0.01");
 
@@ -296,6 +299,7 @@ public class SettlementServiceImpl implements SettlementService {
         BigDecimal pointsCostStore = BigDecimal.ZERO;
         BigDecimal pointsCostPlatform = BigDecimal.ZERO;
         BigDecimal couponCost = BigDecimal.ZERO;
+        BigDecimal couponCostPlatform = BigDecimal.ZERO;
 
         List<SettlementItem> items = new ArrayList<>();
         for (SettlementMapper.OrderRow o : orders) {
@@ -337,11 +341,18 @@ public class SettlementServiceImpl implements SettlementService {
                 }
             }
 
-            // 本店券成本（简化：订单券全额按本店券计，TODO 区分平台券）
+            // 券成本归属（v28）：平台券由平台补贴（不减店铺应付），本店券由店铺承担
             BigDecimal coupon = nz(o.getCouponAmount());
             if (coupon.signum() > 0) {
-                couponCost = couponCost.add(coupon);
-                items.add(item(s.getId(), o, SettlementItem.ITEM_COUPON_STORE, SettlementItem.DIR_DEDUCT, coupon, "本店券成本"));
+                if (o.getCouponScope() != null && o.getCouponScope() == COUPON_SCOPE_PLATFORM) {
+                    couponCostPlatform = couponCostPlatform.add(coupon);
+                    items.add(item(s.getId(), o, SettlementItem.ITEM_COUPON_PLATFORM,
+                            SettlementItem.DIR_PLATFORM, coupon, "平台券补贴（平台承担）"));
+                } else {
+                    couponCost = couponCost.add(coupon);
+                    items.add(item(s.getId(), o, SettlementItem.ITEM_COUPON_STORE,
+                            SettlementItem.DIR_DEDUCT, coupon, "本店券成本"));
+                }
             }
         }
 
@@ -351,6 +362,7 @@ public class SettlementServiceImpl implements SettlementService {
         s.setPointsCostStore(pointsCostStore);
         s.setPointsCostPlatform(pointsCostPlatform);
         s.setCouponCostStore(couponCost);
+        s.setCouponCostPlatform(couponCostPlatform);
         s.setRefundAdjust(BigDecimal.ZERO);
         s.setAdjustAmount(BigDecimal.ZERO);
         s.setFinalAmount(total.subtract(commission).subtract(pointsDeduct)
@@ -446,6 +458,7 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPointsCostStore(r.getPointsCostStore());
         vo.setPointsCostPlatform(r.getPointsCostPlatform());
         vo.setCouponCostStore(r.getCouponCostStore());
+        vo.setCouponCostPlatform(r.getCouponCostPlatform());
         vo.setRefundAdjust(r.getRefundAdjust());
         vo.setAdjustAmount(r.getAdjustAmount());
         vo.setFinalAmount(r.getFinalAmount());
@@ -477,6 +490,7 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPointsCostStore(s.getPointsCostStore());
         vo.setPointsCostPlatform(s.getPointsCostPlatform());
         vo.setCouponCostStore(s.getCouponCostStore());
+        vo.setCouponCostPlatform(s.getCouponCostPlatform());
         vo.setRefundAdjust(s.getRefundAdjust());
         vo.setAdjustAmount(s.getAdjustAmount());
         vo.setFinalAmount(s.getFinalAmount());

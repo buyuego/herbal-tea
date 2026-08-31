@@ -10,7 +10,9 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.idempotency.IdempotencyService;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
+import com.herbaltea.module.marketing.CouponService;
 import com.herbaltea.module.marketing.MarketingService;
+import com.herbaltea.module.marketing.dto.CouponUseResult;
 import com.herbaltea.module.order.dto.CreateOrderRequest;
 import com.herbaltea.module.order.dto.OrderCreateVO;
 import com.herbaltea.module.order.dto.OrderDetailVO;
@@ -73,6 +75,9 @@ public class OrderServiceImpl implements OrderService {
     /** 积分来源：门店营销（D15；平台活动积分=2 待营销活动落地后按活动判定） */
     private static final int POINTS_SOURCE_STORE = 1;
 
+    /** 券归属：无券（v28；1平台券 / 2本店券） */
+    private static final int COUPON_SCOPE_NONE = 0;
+
     private static final DateTimeFormatter NO_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final OrderMapper orderMapper;
@@ -82,6 +87,7 @@ public class OrderServiceImpl implements OrderService {
     private final UserAddressMapper userAddressMapper;
     private final ProductService productService;
     private final MarketingService marketingService;
+    private final CouponService couponService;
     private final OutboxPublisher outboxPublisher;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
@@ -120,12 +126,22 @@ public class OrderServiceImpl implements OrderService {
             throw new BizException("库存不足");
         }
 
-        // 5. 金额计算（v27：积分抵扣已接入营销模块；优惠券待营销活动落地）
+        // 5. 金额计算（v27 积分抵扣 / v28 优惠券核销，均走营销模块原子操作）
         BigDecimal unitPrice = sku.price();
         BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(req.qty()));
-
-        // 5.1 积分抵扣：订单号先生成（作为抵扣流水幂等键）→ 原子扣减 → 折算抵扣金额
         String orderNo = generateNo("HT");
+
+        // 5.1 优惠券核销：门槛与折扣按商品小计计算；原子核销（status 0→1），order_id 稍后回填
+        BigDecimal couponAmount = BigDecimal.ZERO;
+        Integer couponScope = COUPON_SCOPE_NONE;
+        Long userCouponId = req.userCouponId();
+        if (userCouponId != null) {
+            CouponUseResult used = couponService.useCoupon(userCouponId, userId, req.storeId(), subtotal);
+            couponAmount = used.getDiscountAmount();
+            couponScope = used.getScope();
+        }
+
+        // 5.2 积分抵扣：折算抵扣金额后原子扣减（余额不足 → 下单事务整体回滚，券与库存一并还原）
         long usePoints = req.usePoints() == null ? 0L : Math.max(0, req.usePoints());
         BigDecimal pointsDeductAmount = BigDecimal.ZERO;
         if (usePoints > 0) {
@@ -139,8 +155,8 @@ public class OrderServiceImpl implements OrderService {
             // 原子扣减（余额不足抛业务异常 → 下单事务整体回滚，库存一并还原）
             marketingService.usePoints(userId, (int) usePoints, orderNo);
         }
-        BigDecimal payAmount = subtotal.subtract(pointsDeductAmount).max(BigDecimal.ZERO);
-        // 赠送积分按「抵扣后实付」向下取整（1 元 = 1 积分，D15 规则复核）
+        BigDecimal payAmount = subtotal.subtract(couponAmount).subtract(pointsDeductAmount).max(BigDecimal.ZERO);
+        // 赠送积分按「券与积分抵扣后实付」向下取整（1 元 = 1 积分，D15 规则复核）
         long pointsEarned = payAmount.setScale(0, RoundingMode.DOWN).longValue();
 
         // 6. 订单头
@@ -151,7 +167,8 @@ public class OrderServiceImpl implements OrderService {
         order.setStatus(Order.STATUS_PENDING_PAYMENT);
         order.setWarehouseStatus(Order.WH_READY);
         order.setTotalAmount(subtotal);
-        order.setCouponAmount(BigDecimal.ZERO);
+        order.setCouponAmount(couponAmount);
+        order.setCouponScope(couponScope);
         order.setPointsDeduct(usePoints);
         order.setPointsDeductAmount(pointsDeductAmount);
         order.setPointsEarned(pointsEarned);
@@ -167,6 +184,9 @@ public class OrderServiceImpl implements OrderService {
         order.setUrgeCount(0);
         order.setShipTimeoutWarned(0);
         orderMapper.insert(order);
+
+        // 6.1 回填持券记录的核销订单（券先于订单核销，此时才有 orderId）
+        couponService.bindOrderId(userCouponId, order.getId());
 
         // 7. 订单明细（全量快照）
         OrderItem item = new OrderItem();

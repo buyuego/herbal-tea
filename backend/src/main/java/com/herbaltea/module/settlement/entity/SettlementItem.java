@@ -45,6 +45,8 @@ public class SettlementItem extends BaseEntity {
     public static final int ITEM_REFUND_ADJUST = 7;
     /** 明细类型：调整单 */
     public static final int ITEM_ADJUST = 8;
+    /** 明细类型：平台券补贴（平台承担，v28） */
+    public static final int ITEM_COUPON_PLATFORM = 9;
 
     /** 方向：店铺加项 */
     public static final int DIR_INCOME = 1;

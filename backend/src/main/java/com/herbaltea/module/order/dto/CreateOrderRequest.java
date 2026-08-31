@@ -38,6 +38,9 @@ public record CreateOrderRequest(
 
         @Min(value = 0, message = "使用积分不能为负")
         @Schema(description = "使用的积分数量（1 积分抵扣 0.01 元；不填或 0 = 不使用积分）")
-        Long usePoints
+        Long usePoints,
+
+        @Schema(description = "使用的优惠券（user_coupons.id 持券记录 id，非券模板 id；不填 = 不使用券）")
+        Long userCouponId
 ) {
 }
