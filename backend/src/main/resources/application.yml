@@ -1,0 +1,73 @@
+spring:
+  application:
+    name: herbal-tea
+  profiles:
+    active: dev
+  jackson:
+    date-format: yyyy-MM-dd HH:mm:ss
+    time-zone: GMT+8
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+  data:
+    redis:
+      timeout: 3s
+
+server:
+  port: 8080
+  shutdown: graceful
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+    log-impl: org.apache.ibatis.logging.slf4j.Slf4jImpl
+  global-config:
+    banner: false
+    db-config:
+      id-type: assign_id
+      logic-delete-field: deleted
+      logic-delete-value: 1
+      logic-not-delete-value: 0
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+
+# ===== 应用自定义配置（部署清单 V2 环境变量对齐） =====
+app:
+  jwt:
+    # 2h 访问令牌 + 刷新令牌轮换（D12）
+    access-token-ttl: 2h
+    refresh-token-ttl: 30d
+    # 密钥从环境变量注入（生产必填），dev 有本地默认值
+    secret: ${JWT_SECRET:dev-only-secret-change-me-please-0123456789abcdef}
+  outbox:
+    # 扫描间隔 / 批量 / 退避上限（部署清单 OUTBOX_* 变量）
+    scan-interval: ${OUTBOX_SCAN_INTERVAL:5000}
+    batch-size: ${OUTBOX_BATCH:100}
+    max-retry: 5
+    backoff-base-ms: 5000
+    # 积压告警阈值（条）
+    backlog-alert-threshold: ${OUTBOX_BACKLOG_ALERT:100}
+  idempotency:
+    # 幂等键 24h 窗口（A2 请求级防重）
+    ttl: 24h
+  rate-limit:
+    # 限流：默认窗口与阈值（Redis 计数，limit: 前缀）
+    default-per-minute: 120
+  sms:
+    # 异地登录强制短信验证码（A5）
+    code-ttl: 5m
+    daily-limit: 1000

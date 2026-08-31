@@ -1,0 +1,69 @@
+# 本地开发 / 模式B全自建部署：MySQL 8 + Redis 7（设计 v10.0 仅有的两个中间件）
+# 端口仅绑 127.0.0.1，禁止对公网暴露 3306/6379（安全组红线，部署清单 V2 3.1）
+# 使用: docker compose up -d mysql redis   （app 在 IDE 中启动即可热调试）
+version: "3.8"
+
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: herbal-mysql
+    restart: always
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_general_ci
+      - --default-time-zone=+08:00
+      - --slow-query-log=ON
+      - --long-query-time=1
+      - --max-connections=500
+    environment:
+      MYSQL_DATABASE: herbal_tea
+      MYSQL_USER: herbal_tea
+      MYSQL_PASSWORD: herbal_tea_dev
+      MYSQL_ROOT_PASSWORD: root_dev_only
+      TZ: Asia/Shanghai
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - ./mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot_dev_only"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7.2
+    container_name: herbal-redis
+    restart: always
+    command: ["redis-server", "--requirepass", "herbal_tea_dev", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "127.0.0.1:6379:6379"
+    volumes:
+      - ./redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "herbal_tea_dev", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # 生产模式B参考：app 容器（模式A用云数据库时仅 app 单容器）
+  # app:
+  #   image: herbal-tea:0.1.0
+  #   restart: always
+  #   mem_limit: 2g
+  #   environment:
+  #     SPRING_PROFILES_ACTIVE: prod
+  #     DB_HOST: mysql
+  #     REDIS_HOST: redis
+  #   depends_on:
+  #     mysql: { condition: service_healthy }
+  #     redis: { condition: service_healthy }
+  #   ports:
+  #     - "127.0.0.1:8080:8080"
+  #   volumes:
+  #     - ./logs:/opt/herbal-tea/logs
+  #   healthcheck:
+  #     test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/actuator/health"]
+  #     interval: 30s
+  #     timeout: 5s
+  #     retries: 3

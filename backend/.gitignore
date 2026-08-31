@@ -1,0 +1,27 @@
+target/
+*.class
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath
+
+# 本地数据卷（docker-compose 挂载）
+mysql-data/
+redis-data/
+
+# 环境变量（生产 .env 含敏感密钥，权限 600，不入代码库）
+.env
+!.env.example
+
+# 日志
+logs/
+*.log
+
+# 上传临时
+uploads/

@@ -1,0 +1,31 @@
+# 本地开发环境：docker-compose 提供 MySQL 8 + Redis 7
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/herbal_tea?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true
+    username: herbal_tea
+    password: herbal_tea_dev
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+  data:
+    redis:
+      host: 127.0.0.1
+      port: 6379
+      password: herbal_tea_dev
+      database: 0
+
+# 微信生态：dev 用沙箱占位，联调前替换为真实配置（外部申请进度见部署清单 V2）
+wx:
+  miniapp:
+    appid: ${WX_MINIAPP_APPID:dev-appid}
+    secret: ${WX_MINIAPP_SECRET:dev-secret}
+  pay:
+    mch-id: ${WXPAY_MCH_ID:dev-mch-id}
+    api-v3-key: ${WXPAY_API_V3_KEY:dev-key}
+    private-key-path: ${WXPAY_PRIVATE_KEY_PATH:}
+    notify-url: ${WXPAY_NOTIFY_URL:https://example.com/api/wxpay/notify}
+
+logging:
+  level:
+    com.herbaltea: DEBUG
+    org.flywaydb: INFO
