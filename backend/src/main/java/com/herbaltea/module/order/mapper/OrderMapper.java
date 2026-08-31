@@ -48,6 +48,11 @@ public interface OrderMapper extends BaseMapper<Order> {
     @Update("UPDATE orders SET auto_close_status = #{flag}, updated_at = NOW() WHERE id = #{id}")
     int markAutoClose(@Param("id") Long id, @Param("flag") int flag);
 
+    /** 退款审批回填：审批人/时间（v20 退款售后） */
+    @Update("UPDATE orders SET refund_approved_by = #{adminId}, refund_approved_at = NOW(), "
+            + "updated_at = NOW() WHERE id = #{id}")
+    int markRefundApproved(@Param("id") Long id, @Param("adminId") Long adminId);
+
     /** 超时扫描：待支付且已过 expire_at（OrderCloseTask 每分钟轮询） */
     @Select("SELECT * FROM orders WHERE status = 10 AND expire_at IS NOT NULL "
             + "AND expire_at < NOW() ORDER BY id ASC LIMIT 100")

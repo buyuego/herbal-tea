@@ -24,4 +24,11 @@ public interface PaymentRecordMapper extends BaseMapper<PaymentRecord> {
     @Update("UPDATE payment_records SET status = 1, transaction_id = #{transactionId}, "
             + "paid_at = NOW(), updated_at = NOW() WHERE id = #{id} AND status = 0")
     int markPaid(@Param("id") Long id, @Param("transactionId") String transactionId);
+
+    /**
+     * 退款完成：支付单置 3 已退款（幂等：仅 1成功 → 3已退款，重复调用影响行数 0）
+     */
+    @Update("UPDATE payment_records SET status = 3, updated_at = NOW() "
+            + "WHERE order_id = #{orderId} AND status = 1")
+    int markRefundedByOrder(@Param("orderId") Long orderId);
 }

@@ -33,7 +33,7 @@ public enum RefundStatus {
 
     private static final Map<RefundStatus, Set<RefundStatus>> TRANSITIONS = Map.of(
             PENDING_APPROVAL, Set.of(APPROVED, REJECTED),     // 门店审批 / 驳回
-            APPROVED,        Set.of(REFUNDING),                // 发起微信退款
+            APPROVED,        Set.of(REFUNDING, REJECTED),      // 发起微信退款 / 退货验货不通过驳回（v20）
             REFUNDING,       Set.of(REFUNDED, FALLBACK_FAILED),// 退款成功 / 回退失败终态
             REJECTED,        Set.of(),                          // 终态
             REFUNDED,        Set.of(),                          // 终态
@@ -46,5 +46,14 @@ public enum RefundStatus {
             throw new IllegalArgumentException("退款状态不允许 " + this + " -> " + target);
         }
         return target;
+    }
+
+    public static RefundStatus of(int code) {
+        for (RefundStatus s : values()) {
+            if (s.code == code) {
+                return s;
+            }
+        }
+        throw new IllegalArgumentException("未知退款状态: " + code);
     }
 }
