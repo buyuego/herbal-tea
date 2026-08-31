@@ -15,9 +15,9 @@ import java.time.LocalDateTime;
  * MyBatis-Plus 配置
  *
  * <ul>
- *   <li>乐观锁插件：@Version 字段自动实现 CAS 更新（16.2，六张表）</li>
+ *   <li>乐观锁插件：@Version 字段自动实现 CAS 更新（16.2，10 张写表）</li>
  *   <li>分页插件：MySQL 方言</li>
- *   <li>字段自动填充：create_time / update_time / deleted</li>
+ *   <li>字段自动填充：created_at / updated_at（对齐 V1 DDL 统一命名）</li>
  * </ul>
  */
 @Configuration
@@ -36,14 +36,13 @@ public class MybatisConfig {
         return new MetaObjectHandler() {
             @Override
             public void insertFill(MetaObject metaObject) {
-                strictInsertFill(metaObject, "createTime", LocalDateTime.class, LocalDateTime.now());
-                strictInsertFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
-                strictInsertFill(metaObject, "deleted", Integer.class, 0);
+                strictInsertFill(metaObject, "createdAt", LocalDateTime.class, LocalDateTime.now());
+                strictInsertFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
             }
 
             @Override
             public void updateFill(MetaObject metaObject) {
-                strictUpdateFill(metaObject, "updateTime", LocalDateTime.class, LocalDateTime.now());
+                strictUpdateFill(metaObject, "updatedAt", LocalDateTime.class, LocalDateTime.now());
             }
         };
     }
