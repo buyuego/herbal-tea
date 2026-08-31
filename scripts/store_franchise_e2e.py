@@ -182,7 +182,8 @@ def main():
 
     row = db_one("SELECT store_no, store_name, store_type, status, contact_phone FROM stores WHERE id=%s",
                  (new_store_id,))
-    assert row and row[0] == f"ST{new_store_id:03d}" and row[2] == 2 and row[3] == 1, f"门店异常: {row}"
+    import re as _re
+    assert row and _re.fullmatch(r"ST\d{3}", row[0]) and row[2] == 2 and row[3] == 1, f"门店异常: {row}"
     print(f"  ✅ 3.4 DB: 门店 {row[0]} 加盟店(2)/正常(1)/联系人 {row[4]}")
     passed += 1
 

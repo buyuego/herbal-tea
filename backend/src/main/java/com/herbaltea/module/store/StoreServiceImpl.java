@@ -98,10 +98,10 @@ public class StoreServiceImpl implements StoreService {
             throw BizException.conflict("该申请已处理（当前状态=" + statusText(app.getStatus()) + "）");
         }
 
-        // 1. 建门店：store_no = ST + (MAX(id)+1) 顺延（ST001 直营旗舰 / ST002+ 加盟）
-        Long nextId = nextStoreId();
+        // 1. 建门店：store_no = ST + 既有编号最大值顺延（ST001 直营旗舰 / ST002+ 加盟）
+        Long nextSeq = nextStoreSeq();
         Store store = new Store();
-        store.setStoreNo(String.format("ST%03d", nextId));
+        store.setStoreNo(String.format("ST%03d", nextSeq));
         store.setStoreName(app.getApplicantName() + "加盟店");
         store.setStoreType(Store.TYPE_FRANCHISE);
         store.setStatus(Store.STATUS_OK);
@@ -241,13 +241,10 @@ public class StoreServiceImpl implements StoreService {
         return app;
     }
 
-    /** 下一个门店编号序号：MAX(id)+1（编号与 id 对齐顺延） */
-    private Long nextStoreId() {
-        Store latest = storeMapper.selectOne(new LambdaQueryWrapper<Store>()
-                .select(Store::getId)
-                .orderByDesc(Store::getId)
-                .last("LIMIT 1"));
-        return (latest == null ? 0L : latest.getId()) + 1;
+    /** 下一个门店编号序号：按既有编号最大值顺延（编号不复用；与主键 id 解耦，防删除后错位） */
+    private Long nextStoreSeq() {
+        Long max = storeMapper.selectMaxStoreSeq();
+        return (max == null ? 0L : max) + 1;
     }
 
     private String statusText(int status) {
