@@ -5,6 +5,7 @@ import com.herbaltea.common.result.Result;
 import com.herbaltea.infrastructure.audit.AuditLog;
 import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
+import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.FranchiseApplyRequest;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminBindRequest;
@@ -100,6 +101,38 @@ public class StoreController {
     public Result<List<StoreAdminVO>> listStoreAdmins(
             @RequestParam @NotNull(message = "门店不能为空") Long storeId) {
         return Result.ok(storeService.listStoreAdmins(storeId));
+    }
+
+    // ==================== B 端总部：加盟保证金收退确认（store:deposit:confirm） ====================
+
+    @Operation(summary = "保证金流水分页", description = "type 过滤：null 全部 / 1缴纳 / 2退还；status 过滤：null 全部 / 0待处理 / 1完成")
+    @GetMapping("/admin/deposits")
+    @RequirePermission("store:deposit:confirm")
+    public Result<IPage<DepositVO>> pageDeposits(
+            @RequestParam(required = false) Integer type,
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size) {
+        return Result.ok(storeService.pageDeposits(type, status, storeId, page, size));
+    }
+
+    @Operation(summary = "确认收款", description = "缴纳流水 0待处理 → 1完成 + paid_at；重复确认 40900")
+    @PostMapping("/admin/deposits/{id}/confirm")
+    @RequirePermission("store:deposit:confirm")
+    @AuditLog(action = "保证金确认收款")
+    public Result<Void> confirmDeposit(@PathVariable Long id) {
+        storeService.confirmDeposit(id, UserContext.get().getAdminId());
+        return Result.ok();
+    }
+
+    @Operation(summary = "退还保证金", description = "对已确认收款的缴纳流水全额退还，写入退还流水（type=2）；未确认 40900 / 已退 40900")
+    @PostMapping("/admin/deposits/{id}/refund")
+    @RequirePermission("store:deposit:confirm")
+    @AuditLog(action = "保证金退还")
+    public Result<Void> refundDeposit(@PathVariable Long id) {
+        storeService.refundDeposit(id, UserContext.get().getAdminId());
+        return Result.ok();
     }
 
     // ==================== 门店端：D14 目录变更复核 ====================

@@ -1,6 +1,7 @@
 package com.herbaltea.module.store;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
 import com.herbaltea.module.store.entity.FranchiseApplication;
@@ -44,4 +45,19 @@ public interface StoreService {
 
     /** D14：总部商品目录变更后，查询"目录已更新"待复核的本店商品 */
     List<PendingCatalogReviewVO> listPendingCatalogReview(Long storeId);
+
+    /**
+     * 加盟保证金流水分页（总部财务）。
+     * type 过滤：null 全部 / 1缴纳 / 2退还；status 过滤：null 全部 / 0待处理 / 1完成；storeId 可选。
+     */
+    IPage<DepositVO> pageDeposits(Integer type, Integer status, Long storeId, long page, long size);
+
+    /** 确认收款：缴纳流水（type=1, status=0 待处理）→ 完成（status=1 + paid_at）；重复确认 40900 */
+    void confirmDeposit(Long depositId, Long operatorAdminId);
+
+    /**
+     * 退还保证金：对已确认收款（type=1, status=1）的缴纳流水全额退还，
+     * 写入一条退还流水（type=2, status=1, refunded_at）；同 biz_no 已退 → 40900。
+     */
+    void refundDeposit(Long depositId, Long operatorAdminId);
 }

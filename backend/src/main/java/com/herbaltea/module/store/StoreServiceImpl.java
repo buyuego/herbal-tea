@@ -7,6 +7,7 @@ import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.module.auth.entity.AdminUser;
 import com.herbaltea.module.auth.mapper.AdminUserMapper;
+import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
 import com.herbaltea.module.store.entity.FranchiseApplication;
@@ -41,10 +42,10 @@ import java.util.List;
  *   <li>bindStoreAdmin：门店管理员绑定（upsert，首绑自动店主）</li>
  *   <li>storeIdOfAdmin：管理员主店查询（登录 JWT 签发 + Data Scope 数据源）</li>
  *   <li>listPendingCatalogReview：D14 本店目录变更复核</li>
+ *   <li>pageDeposits / confirmDeposit / refundDeposit：加盟保证金收退确认（v12）</li>
  * </ol>
  * 待扩展：
  * <ul>
- *   <li>加盟保证金收退完成确认（franchise_deposits status=1 由财务确认）</li>
  *   <li>多店绑定 store_ids[]（MULTI_STORE 扩展）</li>
  * </ul>
  */
@@ -231,6 +232,61 @@ public class StoreServiceImpl implements StoreService {
         return storeProductReadMapper.listPendingCatalogReview(storeId);
     }
 
+    // ==================== 加盟保证金收退确认（v12） ====================
+
+    @Override
+    public IPage<DepositVO> pageDeposits(Integer type, Integer status, Long storeId, long page, long size) {
+        return franchiseDepositMapper.selectDepositPage(
+                new Page<>(page, size), type, status, storeId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void confirmDeposit(Long depositId, Long operatorAdminId) {
+        FranchiseDeposit deposit = requireDeposit(depositId);
+        if (deposit.getType() != FranchiseDeposit.TYPE_PAY) {
+            throw new BizException(ResultCode.PARAM_ERROR, "仅缴纳流水需确认收款");
+        }
+        if (deposit.getStatus() == FranchiseDeposit.STATUS_DONE) {
+            throw new BizException(ResultCode.CONFLICT, "该保证金已确认收款，请勿重复操作");
+        }
+        deposit.setStatus(FranchiseDeposit.STATUS_DONE);
+        deposit.setPaidAt(LocalDateTime.now());
+        franchiseDepositMapper.updateById(deposit);
+        log.info("保证金确认收款: depositId={} storeId={} bizNo={} amount={} operator={}",
+                depositId, deposit.getStoreId(), deposit.getBizNo(), deposit.getAmount(), operatorAdminId);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void refundDeposit(Long depositId, Long operatorAdminId) {
+        FranchiseDeposit deposit = requireDeposit(depositId);
+        if (deposit.getType() != FranchiseDeposit.TYPE_PAY) {
+            throw new BizException(ResultCode.PARAM_ERROR, "仅缴纳流水可发起退还");
+        }
+        if (deposit.getStatus() != FranchiseDeposit.STATUS_DONE) {
+            throw new BizException(ResultCode.CONFLICT, "该保证金未确认收款，无法退还");
+        }
+        // 幂等：同 biz_no 已存在退还流水 → 已退
+        Long refunded = franchiseDepositMapper.selectCount(new LambdaQueryWrapper<FranchiseDeposit>()
+                .eq(FranchiseDeposit::getBizNo, deposit.getBizNo())
+                .eq(FranchiseDeposit::getType, FranchiseDeposit.TYPE_REFUND));
+        if (refunded != null && refunded > 0) {
+            throw new BizException(ResultCode.CONFLICT, "该保证金已退还，请勿重复操作");
+        }
+        // 全额退还：写入退还流水（同 biz_no 关联缴纳流水），refunded_at 落库
+        FranchiseDeposit refund = new FranchiseDeposit();
+        refund.setStoreId(deposit.getStoreId());
+        refund.setType(FranchiseDeposit.TYPE_REFUND);
+        refund.setAmount(deposit.getAmount());
+        refund.setStatus(FranchiseDeposit.STATUS_DONE);
+        refund.setBizNo(deposit.getBizNo());
+        refund.setRefundedAt(LocalDateTime.now());
+        franchiseDepositMapper.insert(refund);
+        log.info("保证金退还: depositId={} storeId={} bizNo={} amount={} operator={}",
+                depositId, deposit.getStoreId(), deposit.getBizNo(), deposit.getAmount(), operatorAdminId);
+    }
+
     // ==================== 私有工具 ====================
 
     private FranchiseApplication requireApplication(Long applicationId) {
@@ -239,6 +295,14 @@ public class StoreServiceImpl implements StoreService {
             throw new BizException(ResultCode.NOT_FOUND, "加盟申请不存在");
         }
         return app;
+    }
+
+    private FranchiseDeposit requireDeposit(Long depositId) {
+        FranchiseDeposit deposit = franchiseDepositMapper.selectById(depositId);
+        if (deposit == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "保证金流水不存在");
+        }
+        return deposit;
     }
 
     /** 下一个门店编号序号：按既有编号最大值顺延（编号不复用；与主键 id 解耦，防删除后错位） */
