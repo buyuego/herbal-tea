@@ -1,53 +1,201 @@
 package com.herbaltea.module.store;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.herbaltea.common.exception.BizException;
+import com.herbaltea.common.result.ResultCode;
+import com.herbaltea.module.auth.entity.AdminUser;
+import com.herbaltea.module.auth.mapper.AdminUserMapper;
+import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
+import com.herbaltea.module.store.dto.StoreAdminVO;
+import com.herbaltea.module.store.entity.FranchiseApplication;
+import com.herbaltea.module.store.entity.FranchiseDeposit;
+import com.herbaltea.module.store.entity.Store;
 import com.herbaltea.module.store.entity.StoreAdmin;
+import com.herbaltea.module.store.entity.StoreSettlementConfig;
+import com.herbaltea.module.store.mapper.FranchiseApplicationMapper;
+import com.herbaltea.module.store.mapper.FranchiseDepositMapper;
 import com.herbaltea.module.store.mapper.StoreAdminMapper;
+import com.herbaltea.module.store.mapper.StoreMapper;
+import com.herbaltea.module.store.mapper.StoreProductReadMapper;
+import com.herbaltea.module.store.mapper.StoreSettlementConfigMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 
 /**
  * 店铺模块实现（stores / store_admins / franchise_applications / franchise_deposits）
  *
- * <p>已落地：
+ * <p>已落地（v9）：
  * <ol>
- *   <li>storeIdOfAdmin：管理员主店查询（登录 JWT 签发 + Data Scope 数据源，A5/A6）</li>
+ *   <li>applyFranchise：加盟申请（同用户待审核幂等）</li>
+ *   <li>approveFranchise：审批通过 → 建 stores + store_settlement_configs（佣金 5%、T+1 日结）
+ *       + store_admins 待绑定 + franchise_deposits 保证金缴纳流水（事务）</li>
+ *   <li>rejectFranchise：审批拒绝（留审核意见）</li>
+ *   <li>bindStoreAdmin：门店管理员绑定（upsert，首绑自动店主）</li>
+ *   <li>storeIdOfAdmin：管理员主店查询（登录 JWT 签发 + Data Scope 数据源）</li>
+ *   <li>listPendingCatalogReview：D14 本店目录变更复核</li>
  * </ol>
- * 待实现：
- * <ol start="2">
- *   <li>applyFranchise：写 franchise_applications（幂等键 idem:franchise:{applicant}）</li>
- *   <li>approveFranchise：审批通过 → 建 stores + store_settlement_configs（佣金 5%、T+1 日结）+ store_admins</li>
- *   <li>加盟保证金（franchise_deposits）收退</li>
- *   <li>D14：listPendingCatalogReview 本店目录变更复核</li>
- * </ol>
+ * 待扩展：
+ * <ul>
+ *   <li>加盟保证金收退完成确认（franchise_deposits status=1 由财务确认）</li>
+ *   <li>多店绑定 store_ids[]（MULTI_STORE 扩展）</li>
+ * </ul>
  */
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class StoreServiceImpl implements StoreService {
 
+    /** 加盟保证金默认金额（元），审批通过时写一笔「缴纳-待处理」流水 */
+    private static final BigDecimal DEPOSIT_AMOUNT = new BigDecimal("20000.00");
+
+    /** 平台佣金默认比例 5%（T+1 日结，与 V2 直营店一致） */
+    private static final BigDecimal DEFAULT_COMMISSION_RATE = new BigDecimal("0.0500");
+
     private final StoreAdminMapper storeAdminMapper;
+    private final FranchiseApplicationMapper franchiseApplicationMapper;
+    private final StoreMapper storeMapper;
+    private final StoreSettlementConfigMapper storeSettlementConfigMapper;
+    private final FranchiseDepositMapper franchiseDepositMapper;
+    private final StoreProductReadMapper storeProductReadMapper;
+    private final AdminUserMapper adminUserMapper;
 
     @Override
-    public Long applyFranchise(Long userId, String storeName, String contactPhone) {
-        // TODO
-        return null;
+    public Long applyFranchise(Long userId, String applicantName, String phone,
+                               String intendedRegion, String experience) {
+        // 业务幂等：franchise_applications 无 applicant_user 列（V1 DDL），
+        // 以「手机号 + 待审核」近似用户维度（手机号为申请人唯一标识），重复提交直接拒绝。
+        Long pending = franchiseApplicationMapper.selectCount(
+                new LambdaQueryWrapper<FranchiseApplication>()
+                        .eq(FranchiseApplication::getPhone, phone)
+                        .eq(FranchiseApplication::getStatus, FranchiseApplication.STATUS_PENDING));
+        if (pending != null && pending > 0) {
+            throw BizException.conflict("该手机号已有待审核的加盟申请");
+        }
+        FranchiseApplication app = new FranchiseApplication();
+        app.setApplicantName(applicantName);
+        app.setPhone(phone);
+        app.setIntendedRegion(intendedRegion);
+        app.setExperience(experience);
+        app.setStatus(FranchiseApplication.STATUS_PENDING);
+        franchiseApplicationMapper.insert(app);
+        log.info("加盟申请提交: id={} phone={} name={}", app.getId(), phone, applicantName);
+        return app.getId();
     }
 
     @Override
-    public void approveFranchise(Long applicationId, Long operatorAdminId) {
-        // TODO: @AuditLog(action = "加盟审批")
+    @Transactional(rollbackFor = Exception.class)
+    public Long approveFranchise(Long applicationId, Long operatorAdminId) {
+        FranchiseApplication app = requireApplication(applicationId);
+        if (app.getStatus() != FranchiseApplication.STATUS_PENDING) {
+            throw BizException.conflict("该申请已处理（当前状态=" + statusText(app.getStatus()) + "）");
+        }
+
+        // 1. 建门店：store_no = ST + (MAX(id)+1) 顺延（ST001 直营旗舰 / ST002+ 加盟）
+        Long nextId = nextStoreId();
+        Store store = new Store();
+        store.setStoreNo(String.format("ST%03d", nextId));
+        store.setStoreName(app.getApplicantName() + "加盟店");
+        store.setStoreType(Store.TYPE_FRANCHISE);
+        store.setStatus(Store.STATUS_OK);
+        store.setContactName(app.getApplicantName());
+        store.setContactPhone(app.getPhone());
+        storeMapper.insert(store);
+
+        // 2. 结算配置：佣金 5%、T+1 日结、72h 自动确认（对齐 V2 直营店默认值）
+        StoreSettlementConfig cfg = new StoreSettlementConfig();
+        cfg.setStoreId(store.getId());
+        cfg.setCommissionRate(DEFAULT_COMMISSION_RATE);
+        cfg.setCycleType(StoreSettlementConfig.CYCLE_DAILY);
+        cfg.setAutoConfirmHours(72);
+        cfg.setForceCatalogSync(0);
+        storeSettlementConfigMapper.insert(cfg);
+
+        // 3. 保证金缴纳流水（待处理：线下打款后由财务确认 status=1）
+        FranchiseDeposit deposit = new FranchiseDeposit();
+        deposit.setStoreId(store.getId());
+        deposit.setType(FranchiseDeposit.TYPE_PAY);
+        deposit.setAmount(DEPOSIT_AMOUNT);
+        deposit.setStatus(FranchiseDeposit.STATUS_PENDING);
+        deposit.setBizNo("FR-" + applicationId);
+        franchiseDepositMapper.insert(deposit);
+
+        // 4. 申请置通过
+        app.setStatus(FranchiseApplication.STATUS_APPROVED);
+        app.setReviewedBy(operatorAdminId);
+        app.setReviewedAt(LocalDateTime.now());
+        franchiseApplicationMapper.updateById(app);
+
+        log.info("加盟审批通过: applicationId={} storeId={} storeNo={} operator={}",
+                applicationId, store.getId(), store.getStoreNo(), operatorAdminId);
+        return store.getId();
     }
 
     @Override
+    public void rejectFranchise(Long applicationId, Long operatorAdminId, String reviewNote) {
+        FranchiseApplication app = requireApplication(applicationId);
+        if (app.getStatus() != FranchiseApplication.STATUS_PENDING) {
+            throw BizException.conflict("该申请已处理（当前状态=" + statusText(app.getStatus()) + "）");
+        }
+        app.setStatus(FranchiseApplication.STATUS_REJECTED);
+        app.setReviewNote(reviewNote);
+        app.setReviewedBy(operatorAdminId);
+        app.setReviewedAt(LocalDateTime.now());
+        franchiseApplicationMapper.updateById(app);
+        log.info("加盟审批拒绝: applicationId={} operator={} note={}",
+                applicationId, operatorAdminId, reviewNote);
+    }
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
     public void bindStoreAdmin(Long adminId, Long storeId) {
-        // TODO: store_admins upsert（一店多管理员）
+        AdminUser admin = adminUserMapper.selectById(adminId);
+        if (admin == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "管理员不存在");
+        }
+        Store store = storeMapper.selectById(storeId);
+        if (store == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "门店不存在");
+        }
+
+        StoreAdmin exist = storeAdminMapper.selectOne(new LambdaQueryWrapper<StoreAdmin>()
+                .eq(StoreAdmin::getAdminId, adminId)
+                .eq(StoreAdmin::getStoreId, storeId)
+                .last("LIMIT 1"));
+        if (exist != null) {
+            // 复绑：恢复状态即可，is_owner 不降级（店主要走解绑流程）
+            if (exist.getStatus() != StoreAdmin.STATUS_OK) {
+                exist.setStatus(StoreAdmin.STATUS_OK);
+                storeAdminMapper.updateById(exist);
+            }
+            log.info("门店管理员复绑: adminId={} storeId={}（已存在，恢复 status=1）", adminId, storeId);
+            return;
+        }
+
+        // 该店尚无任何正常绑定 → 首个绑定自动为店主（加盟店成立后的主店责任人）
+        boolean firstOwner = storeAdminMapper.selectCount(new LambdaQueryWrapper<StoreAdmin>()
+                .eq(StoreAdmin::getStoreId, storeId)
+                .eq(StoreAdmin::getStatus, StoreAdmin.STATUS_OK)) == 0;
+
+        StoreAdmin sa = new StoreAdmin();
+        sa.setAdminId(adminId);
+        sa.setStoreId(storeId);
+        sa.setIsOwner(firstOwner ? StoreAdmin.IS_OWNER : StoreAdmin.NOT_OWNER);
+        sa.setStatus(StoreAdmin.STATUS_OK);
+        storeAdminMapper.insert(sa);
+        log.info("门店管理员绑定: adminId={} storeId={} isOwner={}", adminId, storeId, sa.getIsOwner());
     }
 
     @Override
     public Long storeIdOfAdmin(Long adminId) {
-        // 店主优先（is_owner=1）；无店主则取 status=1 最近绑定的一条
+        // 店主优先（is_owner=1）；无店主则取 status=1 最近绑定
         StoreAdmin owner = storeAdminMapper.selectOne(new LambdaQueryWrapper<StoreAdmin>()
                 .eq(StoreAdmin::getAdminId, adminId)
                 .eq(StoreAdmin::getIsOwner, StoreAdmin.IS_OWNER)
@@ -65,7 +213,49 @@ public class StoreServiceImpl implements StoreService {
     }
 
     @Override
-    public void listPendingCatalogReview(Long storeId) {
-        // TODO: 查 store_products WHERE catalog_dirty = 1（D14 目录已更新待复核）
+    public IPage<FranchiseApplication> pageApplications(Integer status, long page, long size) {
+        return franchiseApplicationMapper.selectPage(new Page<>(page, size),
+                new LambdaQueryWrapper<FranchiseApplication>()
+                        .eq(status != null, FranchiseApplication::getStatus, status)
+                        .orderByDesc(FranchiseApplication::getId));
+    }
+
+    @Override
+    public List<StoreAdminVO> listStoreAdmins(Long storeId) {
+        // 联查 admin_users 展示信息（@Select 内联 SQL，见 StoreAdminMapper.listByStore）
+        return storeAdminMapper.listByStore(storeId);
+    }
+
+    @Override
+    public List<PendingCatalogReviewVO> listPendingCatalogReview(Long storeId) {
+        return storeProductReadMapper.listPendingCatalogReview(storeId);
+    }
+
+    // ==================== 私有工具 ====================
+
+    private FranchiseApplication requireApplication(Long applicationId) {
+        FranchiseApplication app = franchiseApplicationMapper.selectById(applicationId);
+        if (app == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "加盟申请不存在");
+        }
+        return app;
+    }
+
+    /** 下一个门店编号序号：MAX(id)+1（编号与 id 对齐顺延） */
+    private Long nextStoreId() {
+        Store latest = storeMapper.selectOne(new LambdaQueryWrapper<Store>()
+                .select(Store::getId)
+                .orderByDesc(Store::getId)
+                .last("LIMIT 1"));
+        return (latest == null ? 0L : latest.getId()) + 1;
+    }
+
+    private String statusText(int status) {
+        return switch (status) {
+            case FranchiseApplication.STATUS_PENDING -> "待审核";
+            case FranchiseApplication.STATUS_APPROVED -> "通过";
+            case FranchiseApplication.STATUS_REJECTED -> "拒绝";
+            default -> "未知(" + status + ")";
+        };
     }
 }
