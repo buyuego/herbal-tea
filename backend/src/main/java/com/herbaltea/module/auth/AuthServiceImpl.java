@@ -9,9 +9,11 @@ import com.herbaltea.infrastructure.web.PermissionInterceptor;
 import com.herbaltea.infrastructure.web.RateLimitInterceptor;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.auth.entity.AdminUser;
+import com.herbaltea.module.auth.entity.Role;
 import com.herbaltea.module.auth.mapper.AdminUserMapper;
 import com.herbaltea.module.auth.mapper.DeviceTrustMapper;
 import com.herbaltea.module.auth.mapper.PermissionMapper;
+import com.herbaltea.module.auth.mapper.RoleMapper;
 import com.herbaltea.module.store.StoreService;
 import io.jsonwebtoken.Claims;
 import jakarta.annotation.PostConstruct;
@@ -25,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -59,6 +62,7 @@ public class AuthServiceImpl implements AuthService {
     private final AdminUserMapper adminUserMapper;
     private final DeviceTrustMapper deviceTrustMapper;
     private final PermissionMapper permissionMapper;
+    private final RoleMapper roleMapper;
     private final PasswordEncoder passwordEncoder;
     private final JwtUtil jwtUtil;
     private final StringRedisTemplate redis;
@@ -217,5 +221,24 @@ public class AuthServiceImpl implements AuthService {
 
     /** 登录/刷新成功返回的令牌对 */
     public record TokenPair(String accessToken, String refreshToken, String tokenType, int expiresIn) {
+    }
+
+    @Override
+    public AdminProfile me(Long adminId) {
+        AdminUser admin = adminUserMapper.selectOne(new LambdaQueryWrapper<AdminUser>()
+                .select(AdminUser::getId, AdminUser::getUsername, AdminUser::getRealName, AdminUser::getRoleId)
+                .eq(AdminUser::getId, adminId));
+        if (admin == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "管理员不存在");
+        }
+        Role role = roleMapper.selectById(admin.getRoleId());
+        return new AdminProfile(admin.getId(), admin.getUsername(), admin.getRealName(),
+                admin.getRoleId(), role == null ? null : role.getName(),
+                new ArrayList<>(permissionCodesOfRole(admin.getRoleId())));
+    }
+
+    /** 当前管理员信息（登录后前端菜单/路由权限过滤依据） */
+    public record AdminProfile(Long adminId, String username, String realName, Long roleId,
+                               String roleName, List<String> permissionCodes) {
     }
 }

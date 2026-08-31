@@ -26,4 +26,7 @@ public interface AuthService {
      * 重签令牌：sid=目标店、sids=全量绑定；返回新双令牌。
      */
     AuthServiceImpl.TokenPair switchStore(Long adminId, Long targetStoreId);
+
+    /** 当前管理员信息（登录后拉取账号/角色/权限码，驱动前端菜单与路由权限过滤） */
+    AuthServiceImpl.AdminProfile me(Long adminId);
 }

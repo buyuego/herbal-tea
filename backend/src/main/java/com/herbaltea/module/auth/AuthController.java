@@ -10,6 +10,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import lombok.RequiredArgsConstructor;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -57,6 +58,12 @@ public class AuthController {
     public Result<Void> logout() {
         authService.revoke(UserContext.get().getAdminId());
         return Result.ok();
+    }
+
+    @Operation(summary = "当前管理员信息", description = "登录后拉取账号/角色/权限码列表，驱动前端菜单与路由权限过滤（v15 前端工程配套）")
+    @GetMapping("/admin/me")
+    public Result<AuthServiceImpl.AdminProfile> me() {
+        return Result.ok(authService.me(UserContext.get().getAdminId()));
     }
 
     /**

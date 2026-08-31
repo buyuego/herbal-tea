@@ -1,0 +1,84 @@
+import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+import { useAuthStore } from '@/stores/auth'
+
+/**
+ * 静态路由表 + meta.perm 权限码过滤：
+ * - 路由全量注册（不动态 addRoute），守卫按 /me 返回的 permissionCodes 裁剪
+ * - 无权限码命中的页面 → /403（自定义角色新增权限无需改前端路由，天然支持）
+ */
+const routes: RouteRecordRaw[] = [
+  {
+    path: '/login',
+    name: 'login',
+    component: () => import('@/views/login/index.vue'),
+    meta: { guest: true, title: '登录' },
+  },
+  {
+    path: '/',
+    component: () => import('@/layouts/MainLayout.vue'),
+    redirect: '/dashboard',
+    children: [
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('@/views/dashboard/index.vue'),
+        meta: { title: '工作台', icon: 'Odometer', perm: 'menu:dashboard' },
+      },
+      {
+        path: 'stores',
+        name: 'stores',
+        component: () => import('@/views/stores/index.vue'),
+        meta: { title: '我的门店', icon: 'Shop', perm: 'menu:store' },
+      },
+    ],
+  },
+  {
+    path: '/403',
+    name: 'forbidden',
+    component: () => import('@/views/error/403.vue'),
+    meta: { title: '无权限' },
+  },
+  {
+    path: '/:pathMatch(.*)*',
+    name: 'not-found',
+    component: () => import('@/views/error/403.vue'),
+    meta: { title: '页面不存在' },
+  },
+]
+
+const router = createRouter({
+  history: createWebHistory(),
+  routes,
+})
+
+router.beforeEach(async (to) => {
+  const auth = useAuthStore()
+
+  // 未恢复会话先 bootstrap（有 refreshToken 则静默换新，页面刷新不丢登录态）
+  if (!auth.bootstrapped) {
+    await auth.bootstrap()
+  }
+
+  // 登录页：已登录则回工作台
+  if (to.meta.guest) {
+    return auth.isLoggedIn ? { path: '/dashboard' } : true
+  }
+
+  // 受保护路由：未登录 → 登录页
+  if (!auth.isLoggedIn) {
+    return { path: '/login', query: { redirect: to.fullPath } }
+  }
+
+  // 权限过滤：meta.perm 未命中 → 403（403 页本身放行）
+  const perm = to.meta.perm as string | undefined
+  if (perm && !auth.hasPermission(perm)) {
+    return { path: '/403' }
+  }
+  return true
+})
+
+router.afterEach((to) => {
+  document.title = to.meta.title ? `${to.meta.title} · 养生茶管理后台` : '养生茶管理后台'
+})
+
+export default router
