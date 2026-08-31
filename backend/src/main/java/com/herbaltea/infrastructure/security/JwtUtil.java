@@ -55,7 +55,17 @@ public class JwtUtil {
     /** 签发访问令牌（B 端全参：storeId claim "sid" + roleId claim "r"，RBAC 权限码校验依据） */
     public String createAccessToken(Long userId, String principalType,
                                     String sessionId, Long tokenVersion, Long storeId, Long roleId) {
-        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", storeId, roleId);
+        return createAccessToken(userId, principalType, sessionId, tokenVersion, storeId, roleId, null);
+    }
+
+    /**
+     * 签发访问令牌（B 端 MULTI_STORE 全参：storeId claim "sid" 当前店 + storeIds claim "sids"
+     * 全部已绑定门店（逗号分隔），AuthInterceptor 据此填充 UserContext.storeIds 供切店校验）。
+     */
+    public String createAccessToken(Long userId, String principalType,
+                                    String sessionId, Long tokenVersion, Long storeId, Long roleId,
+                                    java.util.List<Long> storeIds) {
+        return create(userId, principalType, sessionId, tokenVersion, accessTtl, "access", storeId, roleId, storeIds);
     }
 
     /** 签发刷新令牌 */
@@ -73,11 +83,22 @@ public class JwtUtil {
     /** 签发刷新令牌（B 端全参：storeId claim "sid" + roleId claim "r"） */
     public String createRefreshToken(Long userId, String principalType,
                                      String sessionId, Long tokenVersion, Long storeId, Long roleId) {
-        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", storeId, roleId);
+        return createRefreshToken(userId, principalType, sessionId, tokenVersion, storeId, roleId, null);
+    }
+
+    /**
+     * 签发刷新令牌（B 端 MULTI_STORE 全参：storeId "sid" + storeIds "sids" + roleId "r"；
+     * 刷新轮换时保留原 sid，见 AuthServiceImpl#refresh）。
+     */
+    public String createRefreshToken(Long userId, String principalType,
+                                     String sessionId, Long tokenVersion, Long storeId, Long roleId,
+                                     java.util.List<Long> storeIds) {
+        return create(userId, principalType, sessionId, tokenVersion, refreshTtl, "refresh", storeId, roleId, storeIds);
     }
 
     private String create(Long userId, String principalType, String sessionId,
-                          Long tokenVersion, Duration ttl, String kind, Long storeId, Long roleId) {
+                          Long tokenVersion, Duration ttl, String kind, Long storeId, Long roleId,
+                          java.util.List<Long> storeIds) {
         Date now = new Date();
         var builder = Jwts.builder()
                 .id(sessionId)
@@ -90,6 +111,10 @@ public class JwtUtil {
                 .signWith(key);
         if (storeId != null && storeId > 0) {
             builder.claim("sid", storeId);
+        }
+        if (storeIds != null && !storeIds.isEmpty()) {
+            builder.claim("sids", storeIds.stream()
+                    .map(String::valueOf).collect(java.util.stream.Collectors.joining(",")));
         }
         if (roleId != null) {
             builder.claim("r", roleId);

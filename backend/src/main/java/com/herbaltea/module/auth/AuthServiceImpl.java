@@ -130,7 +130,8 @@ public class AuthServiceImpl implements AuthService {
                 .set(AdminUser::getLastLoginAt, LocalDateTime.now()));
         log.info("管理员 {} 登录成功", admin.getUsername());
         return issueTokenPair(admin.getId(), "ADMIN", admin.getTokenVersion(),
-                storeService.storeIdOfAdmin(admin.getId()), admin.getRoleId());
+                storeService.storeIdOfAdmin(admin.getId()), admin.getRoleId(),
+                storeService.storeIdsOfAdmin(admin.getId()));
     }
 
     @Override
@@ -157,11 +158,14 @@ public class AuthServiceImpl implements AuthService {
             redis.delete(REFRESH_SESSION_PREFIX + jti);
             throw new BizException(ResultCode.TOKEN_REVOKED, "登录已失效，请重新登录");
         }
-        // 轮换：旧 jti 作废，签发新双令牌（主店/角色重新查询，支持调店/调岗后刷新生效）
+        // 轮换：旧 jti 作废，签发新双令牌（MULTI_STORE：保持原 sid——切店状态跨刷新不丢；
+        // 若原 sid 已解绑则回退主店；角色重新查询，支持调岗后刷新生效）
         redis.delete(REFRESH_SESSION_PREFIX + jti);
-        log.info("管理员 {} 刷新令牌已轮换", adminId);
-        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(),
-                storeService.storeIdOfAdmin(adminId), admin.getRoleId());
+        List<Long> sids = storeService.storeIdsOfAdmin(adminId);
+        Long oldSid = claims.get("sid") == null ? null : Long.valueOf(String.valueOf(claims.get("sid")));
+        Long targetSid = (oldSid != null && sids.contains(oldSid)) ? oldSid : storeService.storeIdOfAdmin(adminId);
+        log.info("管理员 {} 刷新令牌已轮换（sid={}）", adminId, targetSid);
+        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(), targetSid, admin.getRoleId(), sids);
     }
 
     @Override
@@ -177,12 +181,34 @@ public class AuthServiceImpl implements AuthService {
         log.info("管理员 {} 已登出，token_version 已递增，设备信任已吊销", adminId);
     }
 
-    /** 签发双令牌（访问 2h + 刷新 30d），刷新会话写入 Redis 供轮换校验；storeId 为门店管理员主店（总部传 null） */
-    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion, Long storeId, Long roleId) {
+    @Override
+    public TokenPair switchStore(Long adminId, Long targetStoreId) {
+        if (targetStoreId == null || targetStoreId <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "门店不能为空");
+        }
+        AdminUser admin = adminUserMapper.selectOne(new LambdaQueryWrapper<AdminUser>()
+                .select(AdminUser::getTokenVersion, AdminUser::getStatus, AdminUser::getRoleId)
+                .eq(AdminUser::getId, adminId));
+        if (admin == null || admin.getStatus() != AdminUser.STATUS_ENABLED) {
+            throw new BizException(ResultCode.FORBIDDEN, "账号不可用");
+        }
+        // 实时查绑定（不信任 JWT sids 快照：解绑后旧令牌不可继续切店）
+        List<Long> sids = storeService.storeIdsOfAdmin(adminId);
+        if (!sids.contains(targetStoreId)) {
+            // 40400：不暴露门店存在性
+            throw new BizException(ResultCode.NOT_FOUND, "未绑定该门店，无法切换");
+        }
+        log.info("管理员 {} 切换当前门店 → {}", adminId, targetStoreId);
+        return issueTokenPair(adminId, "ADMIN", admin.getTokenVersion(), targetStoreId, admin.getRoleId(), sids);
+    }
+
+    /** 签发双令牌（访问 2h + 刷新 30d），刷新会话写入 Redis 供轮换校验；storeId 为当前门店（总部传 null），storeIds 为全部绑定（MULTI_STORE） */
+    private TokenPair issueTokenPair(Long adminId, String principalType, Integer tokenVersion,
+                                     Long storeId, Long roleId, List<Long> storeIds) {
         String sessionId = UUID.randomUUID().toString().replace("-", "");
         long ver = tokenVersion == null ? 0L : tokenVersion;
-        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver, storeId, roleId);
-        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver, storeId, roleId);
+        String accessToken = jwtUtil.createAccessToken(adminId, principalType, sessionId, ver, storeId, roleId, storeIds);
+        String refreshToken = jwtUtil.createRefreshToken(adminId, principalType, sessionId, ver, storeId, roleId, storeIds);
         // 刷新会话：TTL 与刷新令牌一致（30d），吊销时 token_version 兜底
         redis.opsForValue().set(REFRESH_SESSION_PREFIX + sessionId,
                 principalType + ":" + adminId, refreshTtl);

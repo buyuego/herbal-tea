@@ -26,6 +26,9 @@ public class UserContext {
     /** B 端：所属店铺 id（总部为 0，门店管理员为对应 store_id） */
     private Long storeId;
 
+    /** B 端：全部已绑定门店 id（JWT claim "sids"，MULTI_STORE 切店校验依据；总部为空） */
+    private java.util.List<Long> storeIds;
+
     /** B 端：角色 id（admin_users.role_id，JWT claim "r"，RBAC 权限码校验依据） */
     private Long roleId;
 
@@ -56,6 +59,11 @@ public class UserContext {
     public static Long storeId() {
         UserContext c = HOLDER.get();
         return c == null ? null : c.storeId;
+    }
+
+    public static java.util.List<Long> storeIds() {
+        UserContext c = HOLDER.get();
+        return c == null ? null : c.storeIds;
     }
 
     public static void clear() {

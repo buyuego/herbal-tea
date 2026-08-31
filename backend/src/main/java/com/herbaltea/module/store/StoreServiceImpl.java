@@ -11,6 +11,7 @@ import com.herbaltea.module.auth.mapper.AdminUserMapper;
 import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
+import com.herbaltea.module.store.dto.StoreBindingVO;
 import com.herbaltea.module.store.dto.StoreProductReviewRow;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 import com.herbaltea.module.store.entity.FranchiseDeposit;
@@ -20,6 +21,7 @@ import com.herbaltea.module.store.entity.StoreSettlementConfig;
 import com.herbaltea.module.store.mapper.FranchiseApplicationMapper;
 import com.herbaltea.module.store.mapper.FranchiseDepositMapper;
 import com.herbaltea.module.store.mapper.StoreAdminMapper;
+import com.herbaltea.module.store.mapper.StoreBindingMapper;
 import com.herbaltea.module.store.mapper.StoreMapper;
 import com.herbaltea.module.store.mapper.StoreProductReadMapper;
 import com.herbaltea.module.store.mapper.StoreProductWriteMapper;
@@ -32,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 店铺模块实现（stores / store_admins / franchise_applications / franchise_deposits）
@@ -47,11 +50,8 @@ import java.util.List;
  *   <li>listPendingCatalogReview：D14 本店目录变更复核</li>
  *   <li>pageDeposits / confirmDeposit / refundDeposit：加盟保证金收退确认（v12）</li>
  *   <li>confirmCatalogReview / rejectCatalogReview：D14 目录变更复核确认/驳回（v13）</li>
+ *   <li>storeIdsOfAdmin / listMyStores：多店绑定（MULTI_STORE，v14）</li>
  * </ol>
- * 待扩展：
- * <ul>
- *   <li>多店绑定 store_ids[]（MULTI_STORE 扩展）</li>
- * </ul>
  */
 @Slf4j
 @Service
@@ -65,6 +65,7 @@ public class StoreServiceImpl implements StoreService {
     private static final BigDecimal DEFAULT_COMMISSION_RATE = new BigDecimal("0.0500");
 
     private final StoreAdminMapper storeAdminMapper;
+    private final StoreBindingMapper storeBindingMapper;
     private final FranchiseApplicationMapper franchiseApplicationMapper;
     private final StoreMapper storeMapper;
     private final StoreSettlementConfigMapper storeSettlementConfigMapper;
@@ -216,6 +217,23 @@ public class StoreServiceImpl implements StoreService {
                 .orderByDesc(StoreAdmin::getId)
                 .last("LIMIT 1"));
         return latest == null ? null : latest.getStoreId();
+    }
+
+    @Override
+    public List<Long> storeIdsOfAdmin(Long adminId) {
+        List<StoreAdmin> binds = storeAdminMapper.selectList(new LambdaQueryWrapper<StoreAdmin>()
+                .eq(StoreAdmin::getAdminId, adminId)
+                .eq(StoreAdmin::getStatus, StoreAdmin.STATUS_OK)
+                .orderByDesc(StoreAdmin::getIsOwner)
+                .orderByAsc(StoreAdmin::getId));
+        return binds.stream().map(StoreAdmin::getStoreId).toList();
+    }
+
+    @Override
+    public List<StoreBindingVO> listMyStores(Long adminId, Long currentStoreId) {
+        List<StoreBindingVO> binds = storeBindingMapper.selectBindingsOf(adminId);
+        binds.forEach(v -> v.setCurrent(Objects.equals(v.getStoreId(), currentStoreId)));
+        return binds;
     }
 
     @Override

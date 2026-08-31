@@ -42,4 +42,13 @@ public interface StoreStaffService {
 
     /** 移除员工（软删绑定 + 即时吊销）；幂等（已移除直接返回） */
     void removeStaff(Long storeId, Long adminId);
+
+    /**
+     * 员工加绑当前门店（MULTI_STORE，v14）：把已存在员工账号绑定到当前上下文门店。
+     *
+     * <p>与创建（新账号）不同，加绑允许目标员工已正常绑定他店（一人多店）；
+     * 加绑成功后即时吊销目标员工旧令牌（JWT "sids" 为快照，须重登刷新）。
+     * 已绑定本店 → 40900；非员工角色 → 40000。
+     */
+    void bindStaff(Long storeId, Long adminId);
 }

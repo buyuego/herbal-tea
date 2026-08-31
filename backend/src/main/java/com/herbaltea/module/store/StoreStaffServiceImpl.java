@@ -151,6 +151,30 @@ public class StoreStaffServiceImpl implements StoreStaffService {
         log.info("移除员工: adminId={} storeId={} 吊销令牌 {}", adminId, storeId, bumped);
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public void bindStaff(Long storeId, Long adminId) {
+        AdminUser staff = adminUserMapper.selectById(adminId);
+        if (staff == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "员工不存在");
+        }
+        requireStaffRole(adminId, staff.getRoleId(), "仅可加绑员工角色账号（店主/管理员不可作为员工加绑）");
+        StoreAdmin bound = boundOf(adminId, storeId);
+        if (bound != null && Objects.equals(bound.getStatus(), StoreAdmin.STATUS_OK)) {
+            throw new BizException(ResultCode.CONFLICT, "该员工已在本店，请勿重复加绑");
+        }
+        if (bound != null) {
+            // 已移除记录：恢复绑定（资料以 admin_users 为准，不做密码重置——加绑≠发放初始密码）
+            bound.setStatus(StoreAdmin.STATUS_OK);
+            storeAdminMapper.updateById(bound);
+        } else {
+            insertBinding(adminId, storeId);
+        }
+        // MULTI_STORE：JWT "sids" 为签发快照——加绑后旧令牌仍以旧 sids 切店属越权面，吊销强制重登
+        int bumped = adminUserMapper.bumpTokenVersion(adminId);
+        log.info("员工加绑: adminId={} storeId={} 吊销令牌 {}", adminId, storeId, bumped);
+    }
+
     // ==================== 私有工具 ====================
 
     private void insertBinding(Long adminId, Long storeId) {

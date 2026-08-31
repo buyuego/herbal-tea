@@ -7,12 +7,16 @@ import com.herbaltea.common.result.ResultCode;
 import com.herbaltea.infrastructure.audit.AuditLog;
 import com.herbaltea.infrastructure.web.RequirePermission;
 import com.herbaltea.infrastructure.web.UserContext;
+import com.herbaltea.module.auth.AuthService;
+import com.herbaltea.module.auth.AuthServiceImpl;
 import com.herbaltea.module.store.dto.CatalogReviewRequest;
 import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.FranchiseApplyRequest;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminBindRequest;
 import com.herbaltea.module.store.dto.StoreAdminVO;
+import com.herbaltea.module.store.dto.StoreBindingVO;
+import com.herbaltea.module.store.dto.SwitchStoreRequest;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -47,6 +51,8 @@ import java.util.List;
 public class StoreController {
 
     private final StoreService storeService;
+    private final AuthService authService;
+    private final StoreStaffService storeStaffService;
 
     // ==================== C 端：加盟申请 ====================
 
@@ -165,6 +171,31 @@ public class StoreController {
                                             @Valid @RequestBody CatalogReviewRequest req) {
         requireStore();
         storeService.rejectCatalogReview(id, UserContext.get().getAdminId(), req.note());
+        return Result.ok();
+    }
+
+    // ==================== MULTI_STORE：多店绑定与切换（v14） ====================
+
+    @Operation(summary = "我的门店列表", description = "MULTI_STORE：当前账号全部正常绑定门店（主店在前），current 标记当前上下文门店；登录即可（仅返回本人绑定，无越权面）")
+    @GetMapping("/my-stores")
+    public Result<List<StoreBindingVO>> myStores() {
+        return Result.ok(storeService.listMyStores(UserContext.get().getAdminId(), UserContext.storeId()));
+    }
+
+    @Operation(summary = "切换当前门店", description = "MULTI_STORE：目标门店须为本人正常绑定（实时查库校验，不信任 JWT 快照）；成功后返回新双令牌（sid=目标店、sids=全量）")
+    @PostMapping("/switch-store")
+    @AuditLog(action = "切换当前门店")
+    public Result<AuthServiceImpl.TokenPair> switchStore(@Valid @RequestBody SwitchStoreRequest req) {
+        return Result.ok(authService.switchStore(UserContext.get().getAdminId(), req.storeId()));
+    }
+
+    @Operation(summary = "员工加绑门店", description = "MULTI_STORE：把员工角色账号绑定到当前上下文门店（允许已绑他店——一人多店）；成功后员工旧令牌失效需重新登录")
+    @PostMapping("/staff/{adminId}/bind")
+    @RequirePermission("store:staff:manage")
+    @AuditLog(action = "员工加绑门店")
+    public Result<Void> bindStaff(@PathVariable Long adminId) {
+        requireStore();
+        storeStaffService.bindStaff(UserContext.storeId(), adminId);
         return Result.ok();
     }
 

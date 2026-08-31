@@ -20,4 +20,10 @@ public interface AuthService {
 
     /** 登出 / 设备吊销：token_version +1 全会话失效 + device_trusts 置失效（D13） */
     void revoke(Long adminId);
+
+    /**
+     * 切换当前门店（MULTI_STORE，v14）：目标店须在本人正常绑定内（实时查库，不信任 JWT 快照）。
+     * 重签令牌：sid=目标店、sids=全量绑定；返回新双令牌。
+     */
+    AuthServiceImpl.TokenPair switchStore(Long adminId, Long targetStoreId);
 }

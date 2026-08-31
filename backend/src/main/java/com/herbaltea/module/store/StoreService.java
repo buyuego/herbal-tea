@@ -4,6 +4,7 @@ import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
+import com.herbaltea.module.store.dto.StoreBindingVO;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 
 import java.util.List;
@@ -36,6 +37,18 @@ public interface StoreService {
      * 多店场景（store_ids[]）由后续 MULTI_STORE 扩展支持。
      */
     Long storeIdOfAdmin(Long adminId);
+
+    /**
+     * 管理员全部正常绑定门店 id（MULTI_STORE：登录 JWT "sids" claim 数据源）。
+     * 主店（is_owner=1）在前；未绑定返回空列表（= 总部管理员）。
+     */
+    List<Long> storeIdsOfAdmin(Long adminId);
+
+    /**
+     * 当前账号可切换门店列表（my-stores，登录即可：只返回本人绑定）。
+     * current 标记当前上下文门店（sid）；主店在前。
+     */
+    List<StoreBindingVO> listMyStores(Long adminId, Long currentStoreId);
 
     /** 加盟申请分页（总部；status 过滤：null 全部 / 0待审核 / 1通过 / 2拒绝） */
     IPage<FranchiseApplication> pageApplications(Integer status, long page, long size);
