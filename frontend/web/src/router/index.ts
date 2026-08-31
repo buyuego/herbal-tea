@@ -42,6 +42,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/stores/index.vue'),
         meta: { title: '我的门店', icon: 'Shop', perm: 'menu:store' },
       },
+      {
+        path: 'staff',
+        name: 'staff',
+        component: () => import('@/views/staff/index.vue'),
+        meta: { title: '员工管理', icon: 'User', perm: 'store:staff:manage' },
+      },
     ],
   },
   {

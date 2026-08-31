@@ -27,7 +27,7 @@ public interface StoreStaffMapper {
             <script>
             SELECT sa.admin_id, u.username, u.real_name, u.phone, u.status AS admin_status,
                    u.role_id, r.name AS role_name, u.last_login_at,
-                   sa.is_owner, sa.created_at AS bound_at
+                   sa.is_owner, sa.status AS bind_status, sa.created_at AS bound_at
             FROM store_admins sa
             JOIN admin_users u ON u.id = sa.admin_id
             JOIN roles r ON r.id = u.role_id

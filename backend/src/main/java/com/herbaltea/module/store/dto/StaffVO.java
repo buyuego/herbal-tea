@@ -27,6 +27,9 @@ public class StaffVO {
     /** admin_users.status：0禁用 / 1正常 */
     private Integer adminStatus;
 
+    /** store_admins.status：1 正常绑定 / 0 已移除（软删可复绑） */
+    private Integer bindStatus;
+
     /** 角色 id（员工应为 5 = STORE_STAFF） */
     private Long roleId;
 
