@@ -42,4 +42,14 @@ public enum SettlementStatus {
         }
         return target;
     }
+
+    /** 按 code 反查（未知 code 抛 IllegalArgumentException） */
+    public static SettlementStatus of(int code) {
+        for (SettlementStatus s : values()) {
+            if (s.code == code) {
+                return s;
+            }
+        }
+        throw new IllegalArgumentException("未知结算状态: " + code);
+    }
 }

@@ -43,6 +43,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '退款售后', icon: 'RefreshLeft', perm: 'menu:refund' },
       },
       {
+        path: 'settlement',
+        name: 'settlement',
+        component: () => import('@/views/settlement/index.vue'),
+        meta: { title: '结算管理', icon: 'Money', perm: 'menu:settlement' },
+      },
+      {
         path: 'stores',
         name: 'stores',
         component: () => import('@/views/stores/index.vue'),
