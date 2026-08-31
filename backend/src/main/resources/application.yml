@@ -26,9 +26,6 @@ mybatis-plus:
     banner: false
     db-config:
       id-type: assign_id
-      logic-delete-field: deleted
-      logic-delete-value: 1
-      logic-not-delete-value: 0
 
 springdoc:
   swagger-ui:
@@ -71,3 +68,7 @@ app:
     # 异地登录强制短信验证码（A5）
     code-ttl: 5m
     daily-limit: 1000
+  admin:
+    # 初始超管治理（AdminPasswordResetRunner）：V2__init_data.sql 占位密码检测锚点
+    initial-username: admin
+    placeholder-hash: ${ADMIN_PLACEHOLDER_HASH:$2a$10$PLACEHOLDER.RESET.VIA.CLI.BEFORE.FIRST.LOGIN}

@@ -40,9 +40,20 @@ public class AuthInterceptor implements HandlerInterceptor {
         this.versionValidator = validator;
     }
 
-    /** 无需登录的白名单（登录接口 / 微信支付回调 / 健康检查） */
+    /**
+     * 无需登录的白名单（登录 / 刷新 / 微信支付回调 / 健康检查 / OpenAPI 文档）
+     *
+     * <p><b>注意</b>：
+     * <ul>
+     *   <li>此处为前缀字面匹配（{@code path.startsWith}），通配符 {@code **} 在 URL 路径中
+     *       不会以字面量出现，写 {@code /api/auth/**} 将永不匹配</li>
+     *   <li>只能放行 login/refresh 两个精确路径——若放行整个 {@code /api/auth/} 前缀，
+     *       logout 也会被误放行（UserContext 为空导致 NPE）</li>
+     * </ul>
+     */
     private static final String[] WHITELIST = {
-            "/api/auth/**", "/api/wxpay/notify/**", "/actuator/**", "/v3/api-docs/**", "/swagger-ui/**"
+            "/api/auth/admin/login", "/api/auth/refresh",
+            "/api/wxpay/notify/", "/actuator/", "/v3/api-docs/", "/swagger-ui/"
     };
 
     @Override
@@ -73,8 +84,14 @@ public class AuthInterceptor implements HandlerInterceptor {
         }
 
         UserContext ctx = new UserContext();
-        ctx.setType("ADMIN".equals(type) ? UserContext.PrincipalType.ADMIN : UserContext.PrincipalType.USER);
+        boolean admin = "ADMIN".equals(type);
+        ctx.setType(admin ? UserContext.PrincipalType.ADMIN : UserContext.PrincipalType.USER);
         ctx.setUserId(userId);
+        if (admin) {
+            // B 端：adminId 即登录主体；storeId 默认 0（总部），门店管理员由 DataScope 拦截器按角色填充
+            ctx.setAdminId(userId);
+            ctx.setStoreId(0L);
+        }
         ctx.setSessionId(JwtUtil.sessionId(claims));
         UserContext.set(ctx);
         return true;

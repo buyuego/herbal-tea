@@ -95,6 +95,12 @@
             <scope>runtime</scope>
         </dependency>
 
+        <!-- BCrypt 密码哈希（仅引入 crypto 模块，不引入完整 Spring Security 过滤链） -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-crypto</artifactId>
+        </dependency>
+
         <!-- OpenAPI（63 API 契约随注解生成，/swagger-ui.html） -->
         <dependency>
             <groupId>org.springdoc</groupId>
