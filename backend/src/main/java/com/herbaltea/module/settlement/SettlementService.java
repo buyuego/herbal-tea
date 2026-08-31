@@ -37,9 +37,21 @@ public interface SettlementService {
     void generate(Long storeId, String period);
 
     /**
-     * 确认结算单（10 待确认 → 20 平台审核）；dev 由超管手动触发（生产 3 天自动确认任务）。
+     * 确认结算单（10 待确认 → 20 平台审核，confirm_status=2 人工确认）；
+     * dev 由超管手动触发。
      */
     void confirm(Long settlementId, Long operatorAdminId);
+
+    /**
+     * 自动确认（10 → 20，confirm_status=1 自动确认）：auto_confirm_at 到期由
+     * {@code SettlementAutoConfirmTask} 定时扫描触发（第 11 章：72h 未确认视为无异议）。
+     */
+    void autoConfirm(Long settlementId);
+
+    /**
+     * 取「待确认且 auto_confirm_at 已到期」的结算单 id（定时任务扫描入口）
+     */
+    java.util.List<Long> listAutoConfirmable(int limit);
 
     /**
      * 平台财务审核通过（20 → 30 已结算，settlement:review）；
@@ -54,7 +66,11 @@ public interface SettlementService {
     void pay(Long settlementId, Long operatorAdminId);
 
     /**
-     * 退款冲正（refund.approved 订阅者调用，→ 90 已冲正）
+     * 退款冲正（refund_approved 订阅者调用，→ 90 已冲正）：
+     * refund_adjust 累加退款金额、final_amount 扣减、插入 type=7 冲正明细行。
+     *
+     * @param refundNo 退款单号（审计）
+     * @param amount 退款金额（冲正金额）
      */
-    void reverse(Long settlementId, Long refundId);
+    void reverse(Long settlementId, Long orderId, String refundNo, java.math.BigDecimal amount);
 }

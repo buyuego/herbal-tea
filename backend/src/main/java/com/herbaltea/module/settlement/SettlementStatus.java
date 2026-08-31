@@ -28,7 +28,7 @@ public enum SettlementStatus {
     }
 
     private static final Map<SettlementStatus, Set<SettlementStatus>> TRANSITIONS = Map.of(
-            PENDING_CONFIRM, Set.of(PLATFORM_REVIEW),   // 3 天自动确认（settlement.confirmed 事件）
+            PENDING_CONFIRM, Set.of(PLATFORM_REVIEW, REVERSED), // 3 天自动确认 / 待确认期退款直接冲正
             PLATFORM_REVIEW, Set.of(SETTLED, REVERSED), // 平台审核通过 / 退款触发冲正
             SETTLED,         Set.of(PAID, REVERSED),    // 打款 / 冲正
             PAID,            Set.of(REVERSED),          // 打款后退款（回退扣款）

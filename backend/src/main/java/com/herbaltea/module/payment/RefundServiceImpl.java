@@ -86,12 +86,13 @@ public class RefundServiceImpl implements RefundService {
         }
         checkStoreAccess(order.getStoreId());
 
-        // 订单状态机校验：20 已支付 / 30 待发货 / 40 已发货 / 50 已签收 可申请退款
+        // 订单状态机校验：20 已支付 / 30 待发货 / 40 已发货 / 50 已签收 / 90 已完结（售后退款）可申请退款
         OrderStatus cur = OrderStatus.of(order.getStatus());
         boolean refundable = cur == OrderStatus.PAID
                 || cur == OrderStatus.PENDING_SHIPMENT
                 || cur == OrderStatus.SHIPPED
-                || cur == OrderStatus.SIGNED;
+                || cur == OrderStatus.SIGNED
+                || cur == OrderStatus.COMPLETED;
         if (!refundable) {
             throw new BizException("订单当前状态（" + cur.getDesc() + "）不可申请退款");
         }
@@ -107,8 +108,8 @@ public class RefundServiceImpl implements RefundService {
         int branch;
         if (cur == OrderStatus.SHIPPED) {
             branch = RefundRecord.BRANCH_IN_TRANSIT;      // 2 在途拦截
-        } else if (cur == OrderStatus.SIGNED) {
-            branch = RefundRecord.BRANCH_RETURNED;        // 3 已签收退货
+        } else if (cur == OrderStatus.SIGNED || cur == OrderStatus.COMPLETED) {
+            branch = RefundRecord.BRANCH_RETURNED;        // 3 已签收/已完结退货（售后退款）
         } else {
             branch = RefundRecord.BRANCH_NOT_SHIPPED;     // 1 未发货直退
         }

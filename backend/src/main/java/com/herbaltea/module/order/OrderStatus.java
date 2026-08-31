@@ -47,7 +47,7 @@ public enum OrderStatus {
             REFUNDING,      Set.of(REFUNDED, REFUND_FALLBACK_FAILED), // 退款成功 / 回退失败终态
             REFUNDED,       Set.of(COMPLETED),              // 退款完成后完结
             CLOSED,         Set.of(),                       // 终态
-            COMPLETED,      Set.of(),                       // 终态
+            COMPLETED,      Set.of(REFUNDING),              // 售后退款（已完结订单退款→结算冲正）
             REFUND_FALLBACK_FAILED, Set.of()                // 终态（人工处理后由财务手工置 REFUNDED）
     );
 

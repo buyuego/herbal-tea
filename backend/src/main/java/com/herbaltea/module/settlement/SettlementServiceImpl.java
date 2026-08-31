@@ -128,9 +128,28 @@ public class SettlementServiceImpl implements SettlementService {
         Settlement s = requireSettlement(settlementId);
         checkStoreAccess(s.getStoreId());
         transit(s, SettlementStatus.PLATFORM_REVIEW);
-        s.setConfirmStatus(1);
+        s.setConfirmStatus(2); // 人工确认（1=自动确认，见 settlements.confirm_status 注释）
         s.setConfirmedAt(LocalDateTime.now());
         settlementMapper.updateById(s);
+    }
+
+    @Override
+    public List<Long> listAutoConfirmable(int limit) {
+        return settlementMapper.selectAutoConfirmableIds(limit);
+    }
+
+    @Override
+    @Transactional
+    public void autoConfirm(Long settlementId) {
+        Settlement s = requireSettlement(settlementId);
+        if (s.getStatus() != SettlementStatus.PENDING_CONFIRM.getCode()) {
+            return; // 幂等：已被手动确认/并发处理
+        }
+        transit(s, SettlementStatus.PLATFORM_REVIEW);
+        s.setConfirmStatus(1); // 自动确认（72h 无异议）
+        s.setConfirmedAt(LocalDateTime.now());
+        settlementMapper.updateById(s);
+        log.info("settlement auto-confirmed: {} (72h 无异议)", s.getSettleNo());
     }
 
     @Override
@@ -153,12 +172,31 @@ public class SettlementServiceImpl implements SettlementService {
 
     @Override
     @Transactional
-    public void reverse(Long settlementId, Long refundId) {
+    public void reverse(Long settlementId, Long orderId, String refundNo, BigDecimal amount) {
         Settlement s = requireSettlement(settlementId);
         if (s.getStatus() == SettlementStatus.REVERSED.getCode()) {
             return; // 幂等：已冲正
         }
         transit(s, SettlementStatus.REVERSED);
+
+        // 冲正金额：refund_adjust 累加，final_amount 扣减（不低于 0）
+        BigDecimal adj = nz(amount);
+        s.setRefundAdjust(nz(s.getRefundAdjust()).add(adj));
+        s.setFinalAmount(nz(s.getFinalAmount()).subtract(adj).max(BigDecimal.ZERO));
+        settlementMapper.updateById(s);
+
+        // 冲正明细行（type=7 冲正，direction=2 店铺减项）
+        SettlementItem it = new SettlementItem();
+        it.setSettlementId(settlementId);
+        it.setOrderId(orderId);
+        it.setOrderNo(settlementMapper.selectOrderNo(orderId));
+        it.setItemType(SettlementItem.ITEM_REFUND_ADJUST);
+        it.setDirection(SettlementItem.DIR_DEDUCT);
+        it.setAmount(adj);
+        it.setRemark("退款冲正 " + refundNo);
+        settlementItemMapper.insert(it);
+        log.info("settlement reversed: {} order={} refundNo={} amount={}",
+                s.getSettleNo(), orderId, refundNo, adj);
     }
 
     // ---------- 内部方法 ----------

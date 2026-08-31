@@ -167,7 +167,7 @@ def main():
     st, body = call("POST", f"/api/settlement/admin/{sid}/confirm", admin_t)
     p("重复 confirm 拒绝", body.get("code") != 0, f"{st} {body}")
     row = db_rows("SELECT status, confirm_status, confirmed_at, version FROM settlements WHERE id=%s", (sid,))[0]
-    p("落库 status=20 confirm_status=1", row[0] == 20 and row[1] == 1 and row[2] is not None, str(row))
+    p("落库 status=20 confirm_status=2(人工确认)", row[0] == 20 and row[1] == 2 and row[2] is not None, str(row))
 
     st, body = call("POST", f"/api/settlement/admin/{sid}/review", admin_t)
     p("review 20→30", st == 200 and body.get("code") == 0, f"{st} {body}")

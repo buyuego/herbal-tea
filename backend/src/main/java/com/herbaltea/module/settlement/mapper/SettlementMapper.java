@@ -190,6 +190,33 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
     List<Long> listStoreIdsWithUnsettled(@Param("start") java.time.LocalDateTime start,
                                          @Param("end") java.time.LocalDateTime end);
 
+    /**
+     * 自动确认任务用：取「待确认且 auto_confirm_at 已到期」的结算单 id（cron 每分钟扫描）
+     */
+    @Select("""
+            SELECT id FROM settlements
+            WHERE status = 10 AND auto_confirm_at IS NOT NULL AND auto_confirm_at <= NOW()
+            ORDER BY id
+            LIMIT #{limit}
+            """)
+    List<Long> selectAutoConfirmableIds(@Param("limit") int limit);
+
+    /**
+     * 冲正订阅者用：按订单 id 反查其所属结算单（经 settlement_items 关联，取最近一张）
+     */
+    @Select("""
+            SELECT s.* FROM settlements s
+            JOIN settlement_items si ON si.settlement_id = s.id
+            WHERE si.order_id = #{orderId}
+            ORDER BY s.id DESC
+            LIMIT 1
+            """)
+    Settlement selectByOrderId(@Param("orderId") Long orderId);
+
+    /** 冲正明细行用：查订单号 */
+    @Select("SELECT order_no FROM orders WHERE id = #{orderId}")
+    String selectOrderNo(@Param("orderId") Long orderId);
+
     /** 生成结算单的中间行结构 */
     @lombok.Data
     class OrderRow {
