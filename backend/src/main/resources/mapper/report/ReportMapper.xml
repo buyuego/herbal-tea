@@ -1,0 +1,213 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herbaltea.module.report.ReportMapper">
+
+    <!-- 状态白名单：已支付及之后（排除 10 待支付 / 60 退款中 / 70 已取消 / 80 已退款） -->
+    <sql id="paidStatuses">
+        (20, 30, 40, 50, 90)
+    </sql>
+
+    <!-- 退款中 + 已退款：用于退款率分子 -->
+    <sql id="refundStatuses">
+        (60, 80)
+    </sql>
+
+    <!-- storeIds 过滤片段：null 不加条件，否则 IN (...) -->
+    <sql id="storeIdsFilter">
+        <choose>
+            <when test="storeIds != null and storeIds.size() > 0">
+                AND o.store_id IN
+                <foreach collection="storeIds" item="sid" open="(" close=")" separator=",">
+                    #{sid}
+                </foreach>
+            </when>
+            <when test="storeIds != null and storeIds.size() == 0">
+                AND 1 = 0
+            </when>
+        </choose>
+    </sql>
+
+    <!-- ============== overview（区间聚合） ============== -->
+    <select id="selectOverview" resultType="com.herbaltea.module.report.OverviewAggregate">
+        SELECT
+            COALESCE(SUM(o.pay_amount), 0)        AS salesAmount,
+            COUNT(o.id)                           AS orderCount,
+            COUNT(DISTINCT o.user_id)             AS memberCount
+        FROM orders o
+        WHERE o.status IN
+        <include refid="paidStatuses"/>
+        AND o.created_at &gt;= #{startAt}
+        AND o.created_at &lt; #{endAt}
+        <include refid="storeIdsFilter"/>
+    </select>
+
+    <select id="selectOverviewRow" resultType="com.herbaltea.module.report.OverviewAggregateRow">
+        SELECT
+            COALESCE(SUM(o.pay_amount), 0) AS salesAmount,
+            COUNT(o.id)                    AS orderCount
+        FROM orders o
+        WHERE o.status IN
+        <include refid="paidStatuses"/>
+        AND o.created_at &gt;= #{startAt}
+        AND o.created_at &lt; #{endAt}
+        <include refid="storeIdsFilter"/>
+    </select>
+
+    <!-- ============== sales trend（按天补零） ============== -->
+    <!-- 先查 date_series（自然日期序列），再 LEFT JOIN 聚合 -->
+    <select id="selectSalesTrend" resultType="com.herbaltea.module.report.dto.TrendPoint">
+        SELECT
+            d.dt                                  AS date,
+            COALESCE(SUM(o.pay_amount), 0)         AS value
+        FROM (
+            SELECT DATE_ADD(#{startDate}, INTERVAL n DAY) AS dt
+            FROM (
+                SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4
+                UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9
+                UNION SELECT 10 UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14
+                UNION SELECT 15 UNION SELECT 16 UNION SELECT 17 UNION SELECT 18 UNION SELECT 19
+                UNION SELECT 20 UNION SELECT 21 UNION SELECT 22 UNION SELECT 23 UNION SELECT 24
+                UNION SELECT 25 UNION SELECT 26 UNION SELECT 27 UNION SELECT 28 UNION SELECT 29
+            ) seq
+            WHERE DATE_ADD(#{startDate}, INTERVAL n DAY) &lt;= #{endDate}
+        ) d
+        LEFT JOIN orders o
+            ON DATE(o.created_at) = d.dt
+            AND o.status IN
+            <include refid="paidStatuses"/>
+            <include refid="storeIdsFilter"/>
+        GROUP BY d.dt
+        ORDER BY d.dt ASC
+    </select>
+
+    <!-- ============== order funnel（按状态聚合） ============== -->
+    <select id="selectOrderFunnel" resultType="com.herbaltea.module.report.dto.FunnelItem">
+        SELECT
+            o.status AS status,
+            COUNT(o.id) AS count
+        FROM orders o
+        WHERE o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+        AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+        <include refid="storeIdsFilter"/>
+        GROUP BY o.status
+        ORDER BY o.status ASC
+    </select>
+
+    <!-- ============== category share ============== -->
+    <select id="selectCategoryShare" resultType="com.herbaltea.module.report.dto.CategoryShareItem">
+        SELECT
+            COALESCE(pc.name, '未分类')    AS name,
+            COALESCE(SUM(oi.price * oi.qty), 0) AS value
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN product_skus ps ON ps.id = oi.sku_id
+        JOIN products p ON p.id = ps.product_id
+        LEFT JOIN product_categories pc ON pc.id = p.category_id
+        WHERE o.status IN
+        <include refid="paidStatuses"/>
+        AND o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+        AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+        <include refid="storeIdsFilter"/>
+        GROUP BY pc.id, pc.name
+        HAVING value &gt; 0
+        ORDER BY value DESC
+        LIMIT 10
+    </select>
+
+    <!-- ============== top skus ============== -->
+    <select id="selectTopSkus" resultType="com.herbaltea.module.report.dto.TopSkuItem">
+        SELECT
+            ps.id                AS skuId,
+            ps.specs             AS skuName,
+            p.id                 AS productId,
+            p.name               AS productName,
+            SUM(oi.qty)          AS qty,
+            SUM(oi.price * oi.qty) AS amount
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.id
+        JOIN product_skus ps ON ps.id = oi.sku_id
+        JOIN products p ON p.id = ps.product_id
+        WHERE o.status IN
+        <include refid="paidStatuses"/>
+        AND o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+        AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+        <include refid="storeIdsFilter"/>
+        GROUP BY ps.id, ps.specs, p.id, p.name
+        ORDER BY qty DESC, amount DESC
+        LIMIT #{limit}
+    </select>
+
+    <!-- ============== points trend ============== -->
+    <select id="selectPointsTrend" resultType="com.herbaltea.module.report.dto.PointsTrendPoint">
+        SELECT
+            d.dt                                                       AS date,
+            COALESCE(SUM(CASE WHEN pr.change_type IN (1, 5) THEN pr.points ELSE 0 END), 0) AS granted,
+            COALESCE(SUM(CASE WHEN pr.change_type = 2 THEN pr.points ELSE 0 END), 0)        AS used
+        FROM (
+            SELECT DATE_ADD(#{startDate}, INTERVAL n DAY) AS dt
+            FROM (
+                SELECT 0 n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4
+                UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9
+                UNION SELECT 10 UNION SELECT 11 UNION SELECT 12 UNION SELECT 13 UNION SELECT 14
+            ) seq
+            WHERE DATE_ADD(#{startDate}, INTERVAL n DAY) &lt;= #{endDate}
+        ) d
+        LEFT JOIN point_records pr
+            ON DATE(pr.created_at) = d.dt
+            AND pr.source_type = 1
+            <if test="storeIds != null and storeIds.size() > 0">
+                AND pr.store_id IN
+                <foreach collection="storeIds" item="sid" open="(" close=")" separator=",">
+                    #{sid}
+                </foreach>
+            </if>
+        GROUP BY d.dt
+        ORDER BY d.dt ASC
+    </select>
+
+    <!-- ============== promo stats ============== -->
+    <select id="selectPromoStats" resultType="com.herbaltea.module.report.dto.PromoStatItem">
+        SELECT
+            p.id                AS promotionId,
+            p.title             AS name,
+            p.scope             AS scope,
+            COUNT(o.id)         AS orderCount,
+            COALESCE(SUM(o.promotion_discount), 0) AS discountTotal
+        FROM promotions p
+        LEFT JOIN orders o
+            ON o.promotion_id = p.id
+            AND o.status IN
+            <include refid="paidStatuses"/>
+            AND o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+            AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+            <include refid="storeIdsFilter"/>
+        <where>
+            <if test="storeIds != null and storeIds.size() == 0">
+                1 = 0
+            </if>
+        </where>
+        GROUP BY p.id, p.title, p.scope
+        HAVING orderCount &gt; 0
+        ORDER BY orderCount DESC, discountTotal DESC
+        LIMIT 20
+    </select>
+
+    <!-- ============== refund rate ============== -->
+    <select id="selectRefundRate" resultType="com.herbaltea.module.report.RefundAggregate">
+        SELECT
+            (SELECT COUNT(*) FROM orders o
+             WHERE o.status IN
+             <include refid="refundStatuses"/>
+             AND o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+             AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+             <include refid="storeIdsFilter"/>) AS refundCount,
+            (SELECT COUNT(*) FROM orders o
+             WHERE o.status IN
+             <include refid="paidStatuses"/>
+             AND o.created_at &gt;= CONCAT(#{startDate}, ' 00:00:00')
+             AND o.created_at &lt; DATE_ADD(CONCAT(#{endDate}, ' 00:00:00'), INTERVAL 1 DAY)
+             <include refid="storeIdsFilter"/>) AS paidCount
+    </select>
+
+</mapper>
