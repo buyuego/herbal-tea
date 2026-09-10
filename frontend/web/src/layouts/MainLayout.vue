@@ -62,6 +62,7 @@ import { ElMessageBox } from 'element-plus'
 import { ArrowDown, SwitchButton } from '@element-plus/icons-vue'
 import { useAuthStore } from '@/stores/auth'
 import StoreSwitcher from '@/components/StoreSwitcher.vue'
+import NotificationBell from '@/components/NotificationBell.vue'
 
 const route = useRoute()
 const router = useRouter()

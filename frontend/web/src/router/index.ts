@@ -96,6 +96,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/roles/index.vue'),
         meta: { title: '角色权限', icon: 'Lock', perm: 'system:role:config' },
       },
+      {
+        path: 'notification',
+        name: 'notification',
+        component: () => import('@/views/notification/index.vue'),
+        meta: { title: '通知中心', icon: 'Bell', perm: 'menu:notification' },
+      },
     ],
   },
   {

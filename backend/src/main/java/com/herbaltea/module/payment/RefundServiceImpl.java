@@ -448,6 +448,14 @@ public class RefundServiceImpl implements RefundService {
         payload.put("orderId", rr.getOrderId());
         payload.put("amount", rr.getAmount());
         payload.put("refundBranch", rr.getRefundBranch());
+        // v32 通知推送需要 storeId（店长按本店过滤）：从 order 补
+        if (rr.getOrderId() != null) {
+            com.herbaltea.module.order.entity.Order order = orderMapper.selectById(rr.getOrderId());
+            if (order != null) {
+                payload.put("storeId", order.getStoreId());
+                payload.put("orderNo", order.getOrderNo());
+            }
+        }
         outboxPublisher.publish(type, "refund_approved:" + rr.getRefundNo(), payload);
     }
 

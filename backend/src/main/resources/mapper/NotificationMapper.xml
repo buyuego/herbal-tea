@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herbaltea.module.notification.mapper.NotificationMapper">
+
+    <!-- 标记单条已读（recipient_id 二次校验防越权） -->
+    <update id="markRead">
+        UPDATE notifications
+        SET is_read = 1, read_at = NOW()
+        WHERE id = #{id} AND recipient_id = #{recipientId} AND is_read = 0
+    </update>
+
+    <!-- 标记当前用户全部已读 -->
+    <update id="markAllRead">
+        UPDATE notifications
+        SET is_read = 1, read_at = NOW()
+        WHERE recipient_id = #{recipientId} AND is_read = 0
+    </update>
+
+    <!-- 删除单条（recipient_id 二次校验防越权） -->
+    <delete id="deleteOwned">
+        DELETE FROM notifications
+        WHERE id = #{id} AND recipient_id = #{recipientId}
+    </delete>
+
+    <!-- 当前用户未读数 -->
+    <select id="countUnread" resultType="java.lang.Long">
+        SELECT COUNT(*) FROM notifications
+        WHERE recipient_id = #{recipientId} AND is_read = 0
+    </select>
+
+    <!-- 按角色+门店查接收人 id 列表（联表 admin_users + store_admins） -->
+    <!-- role=NULL 表示全平台（仅查 admin_users）；storeId=NULL 表示不限门店 -->
+    <select id="selectRecipientIdsByRoleAndStore" resultType="java.lang.Long">
+        SELECT DISTINCT u.id
+        FROM admin_users u
+        <if test="role != null and (role == 4 or role == 5) and storeId != null">
+            JOIN store_admins sa ON sa.admin_id = u.id
+                AND sa.store_id = #{storeId} AND sa.status = 1
+        </if>
+        WHERE u.status = 1
+        <if test="role != null and role != 0">
+            AND u.role_id = #{role}
+        </if>
+    </select>
+
+    <!-- 分页查询（按 recipient 过滤，可选未读/业务类型/时间窗） -->
+    <select id="selectPageByRecipient" resultType="com.herbaltea.module.notification.entity.Notification">
+        SELECT id, recipient_id, recipient_role, store_id, biz_type, biz_id,
+               title, content, link, is_read, read_at, created_at
+        FROM notifications
+        WHERE recipient_id = #{recipientId}
+        <if test="unreadOnly != null and unreadOnly == true">
+            AND is_read = 0
+        </if>
+        <if test="bizType != null and bizType != ''">
+            AND biz_type = #{bizType}
+        </if>
+        ORDER BY created_at DESC
+        LIMIT #{offset}, #{size}
+    </select>
+
+    <!-- 全员/角色/门店批量推送的最近列表（管理端审计） -->
+    <select id="selectRecentByRecipients" resultType="com.herbaltea.module.notification.entity.Notification">
+        SELECT id, recipient_id, recipient_role, store_id, biz_type, biz_id,
+               title, content, link, is_read, read_at, created_at
+        FROM notifications
+        <where>
+            <if test="recipientIds != null and recipientIds.size() > 0">
+                recipient_id IN
+                <foreach collection="recipientIds" item="rid" open="(" close=")" separator=",">
+                    #{rid}
+                </foreach>
+            </if>
+        </where>
+        ORDER BY created_at DESC
+        LIMIT #{limit}
+    </select>
+
+</mapper>

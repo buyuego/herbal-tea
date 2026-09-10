@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.herbaltea.infrastructure.outbox.EventSubscriber;
 import com.herbaltea.infrastructure.outbox.OutboxEvent;
 import com.herbaltea.infrastructure.outbox.OutboxEventType;
+import com.herbaltea.module.notification.service.NotificationService;
 import com.herbaltea.module.settlement.entity.Settlement;
 import com.herbaltea.module.settlement.mapper.SettlementMapper;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ import java.math.BigDecimal;
  *         <li>结算单 40 已打款 → 无法自动冲正，告警日志转人工（TODO 微信分账原路退回）</li>
  *       </ul>
  *   <li>失败抛异常 → Worker 指数退避重试，超 5 次置 FAILED + 告警</li>
+ *   <li>v32 扩展：通知推送（退款已审批通过 → 店长+仓管）</li>
  * </ul>
  */
 @Slf4j
@@ -36,6 +38,7 @@ public class SettlementReverseSubscriber implements EventSubscriber {
 
     private final SettlementService settlementService;
     private final SettlementMapper settlementMapper;
+    private final NotificationService notificationService;
     private final ObjectMapper objectMapper;
 
     @Override
@@ -50,6 +53,14 @@ public class SettlementReverseSubscriber implements EventSubscriber {
             Long orderId = node.get("orderId").asLong();
             String refundNo = node.get("refundNo").asText();
             BigDecimal amount = node.get("amount").decimalValue();
+            Long storeId = node.has("storeId") ? node.get("storeId").asLong() : null;
+
+            // v32 通知推送：退款已审批通过 → 店长（本店）+ 仓管（无条件，无论是否需冲正）
+            String title = "退款已审批通过";
+            String content = "退款单 " + refundNo + " 已审批通过，将原路退回";
+            String link = "/refund?keyword=" + refundNo;
+            notificationService.pushByRole(4, storeId, "refund", refundNo, title, content, link);
+            notificationService.pushByRole(3, null, "refund", refundNo, title, content, link);
 
             Settlement s = settlementMapper.selectByOrderId(orderId);
             if (s == null) {

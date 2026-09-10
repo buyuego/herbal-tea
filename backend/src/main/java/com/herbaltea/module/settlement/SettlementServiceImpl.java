@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.herbaltea.common.exception.BizException;
 import com.herbaltea.common.result.PageResult;
 import com.herbaltea.common.result.ResultCode;
+import com.herbaltea.infrastructure.outbox.OutboxEventType;
+import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.settlement.dto.SettlementDetailVO;
 import com.herbaltea.module.settlement.dto.SettlementPageQuery;
@@ -22,7 +24,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
@@ -56,6 +60,7 @@ public class SettlementServiceImpl implements SettlementService {
 
     private final SettlementMapper settlementMapper;
     private final SettlementItemMapper settlementItemMapper;
+    private final OutboxPublisher outboxPublisher;
 
     // ---------- 查询 ----------
 
@@ -154,6 +159,7 @@ public class SettlementServiceImpl implements SettlementService {
         s.setConfirmStatus(1); // 自动确认（72h 无异议）
         s.setConfirmedAt(LocalDateTime.now());
         settlementMapper.updateById(s);
+        publishSettlementConfirmed(s);
         log.info("settlement auto-confirmed: {} (72h 无异议)", s.getSettleNo());
     }
 
@@ -529,5 +535,16 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setCreatedAt(s.getCreatedAt());
         vo.setVersion(s.getVersion());
         vo.setParentSettlementId(s.getParentSettlementId());
+    }
+
+    /** 发布 settlement_confirmed 事件（v32 接入：店长通知） */
+    private void publishSettlementConfirmed(Settlement s) {
+        Map<String, Object> payload = new HashMap<>();
+        payload.put("settlementId", s.getId());
+        payload.put("settlementNo", s.getSettleNo());
+        payload.put("storeId", s.getStoreId());
+        payload.put("finalAmount", s.getFinalAmount());
+        outboxPublisher.publish(OutboxEventType.settlement_confirmed,
+                "settlement_confirmed:" + s.getSettleNo(), payload);
     }
 }
