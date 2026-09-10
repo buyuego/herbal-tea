@@ -102,6 +102,12 @@ const routes: RouteRecordRaw[] = [
         component: () => import('@/views/notification/index.vue'),
         meta: { title: '通知中心', icon: 'Bell', perm: 'menu:notification' },
       },
+      {
+        path: 'export',
+        name: 'export',
+        component: () => import('@/views/export/index.vue'),
+        meta: { title: '导出中心', icon: 'Download', perm: 'menu:export' },
+      },
     ],
   },
   {

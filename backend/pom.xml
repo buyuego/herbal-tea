@@ -108,6 +108,13 @@
             <version>${springdoc.version}</version>
         </dependency>
 
+        <!-- EasyExcel（阿里 3.3.x，SXSSF 流式） -->
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>easyexcel</artifactId>
+            <version>3.3.4</version>
+        </dependency>
+
         <!-- 微信生态：小程序登录 + 支付/服务商分账 -->
         <dependency>
             <groupId>com.github.binarywang</groupId>

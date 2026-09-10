@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.herbaltea.module.export.mapper.ExportTaskMapper">
+
+    <!-- Worker 抢锁：CAS 把 status 0→10，避免重复 dispatch -->
+    <update id="tryAcquire">
+        UPDATE export_tasks
+           SET status = 10, started_at = NOW(3)
+         WHERE id = #{id} AND status = 0
+    </update>
+
+    <!-- 候选 pending（按 id 顺序，避免新插入任务长时间排队） -->
+    <select id="selectPending" resultType="com.herbaltea.module.export.entity.ExportTask">
+        SELECT id, task_no, biz_type, operator_id, operator_name, filter_json,
+               row_count, file_size, file_path, status, error_msg,
+               started_at, finished_at, created_at
+          FROM export_tasks
+         WHERE status = 0
+         ORDER BY id ASC
+         LIMIT #{limit}
+    </select>
+
+    <!-- 操作人视角列表（本人隔离） -->
+    <select id="selectByOperator" resultType="com.herbaltea.module.export.entity.ExportTask">
+        SELECT id, task_no, biz_type, operator_id, operator_name, filter_json,
+               row_count, file_size, file_path, status, error_msg,
+               started_at, finished_at, created_at
+          FROM export_tasks
+         WHERE operator_id = #{operatorId}
+        <if test="status != null">
+           AND status = #{status}
+        </if>
+         ORDER BY id DESC
+         LIMIT #{offset}, #{size}
+    </select>
+
+    <select id="countByOperator" resultType="long">
+        SELECT COUNT(*) FROM export_tasks
+        WHERE operator_id = #{operatorId}
+        <if test="status != null">
+           AND status = #{status}
+        </if>
+    </select>
+
+    <!-- 标记完成：成功/失败统一接口 -->
+    <update id="markFinished">
+        UPDATE export_tasks
+           SET status = #{status},
+               row_count = #{rowCount},
+               file_size = #{fileSize},
+               file_path = #{filePath},
+               error_msg = #{errorMsg},
+               finished_at = #{finishedAt}
+         WHERE id = #{id}
+    </update>
+
+</mapper>

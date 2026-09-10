@@ -147,8 +147,8 @@ def main():
     body = p("2.1 权限树", r, 0)
     tree = body["data"]
     menus = [n for n in tree if n["type"] == 1]
-    print(f"     根菜单 {len(menus)} 个（期望 11）：{[n['code'] for n in menus]}")
-    assert len(menus) == 11, "根菜单数异常"
+    print(f"     根菜单 {len(menus)} 个（期望 12，v33 新增 menu:export）：{[n['code'] for n in menus]}")
+    assert len(menus) == 12, "根菜单数异常"
     all_nodes = []
     def walk(nodes):
         for n in nodes:

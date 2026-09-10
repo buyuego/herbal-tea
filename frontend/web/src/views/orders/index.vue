@@ -15,6 +15,7 @@
       </el-select>
       <el-button type="primary" plain @click="onSearch">查询</el-button>
       <el-button @click="onReset">重置</el-button>
+      <el-button type="success" plain @click="onExport" :loading="exporting">导出Excel</el-button>
     </div>
 
     <!-- 订单表格 -->
@@ -179,6 +180,7 @@ import type { Order, OrderDetail, ShippingLog } from '@/types/order'
 
 const auth = useAuthStore()
 const canShip = computed(() => auth.hasPermission('order:ship'))
+const canExport = computed(() => auth.hasPermission('export:run'))
 
 const loading = ref(false)
 const orders = ref<Order[]>([])
@@ -193,6 +195,24 @@ const query = reactive({
 const detailVisible = ref(false)
 const detail = ref<OrderDetail | null>(null)
 const logs = ref<ShippingLog[]>([])
+
+const exporting = ref(false)
+
+async function onExport() {
+  exporting.value = true
+  try {
+    const task = await createExportTaskApi({
+      bizType: 'order',
+      filter: {
+        orderNo: query.orderNo || undefined,
+        status: query.status,
+      },
+    })
+    ElMessage.success(`已创建导出任务 ${task.taskNo}，请到「导出中心」下载`)
+  } finally {
+    exporting.value = false
+  }
+}
 
 const shipDialogVisible = ref(false)
 const shipSaving = ref(false)
