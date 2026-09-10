@@ -41,6 +41,12 @@ public class OrderDetailVO {
     @Schema(description = "优惠券抵扣")
     private BigDecimal couponAmount;
 
+    @Schema(description = "命中的促销活动 id（未命中为 null）")
+    private Long promotionId;
+
+    @Schema(description = "活动优惠金额")
+    private BigDecimal promotionDiscount;
+
     @Schema(description = "积分抵扣金额")
     private BigDecimal pointsDeductAmount;
 

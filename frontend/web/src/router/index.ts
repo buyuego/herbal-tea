@@ -85,6 +85,12 @@ const routes: RouteRecordRaw[] = [
         meta: { title: '优惠券管理', icon: 'Ticket', perm: 'menu:marketing' },
       },
       {
+        path: 'promotion',
+        name: 'promotion',
+        component: () => import('@/views/promotion/index.vue'),
+        meta: { title: '促销活动', icon: 'Present', perm: 'menu:marketing' },
+      },
+      {
         path: 'roles',
         name: 'roles',
         component: () => import('@/views/roles/index.vue'),

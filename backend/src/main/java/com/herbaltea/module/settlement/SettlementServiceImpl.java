@@ -49,6 +49,8 @@ public class SettlementServiceImpl implements SettlementService {
 
     /** 券归属：平台券（v28，平台承担成本） */
     private static final int COUPON_SCOPE_PLATFORM = 1;
+    /** 活动归属：平台活动（v30，平台承担成本） */
+    private static final int PROMOTION_SCOPE_PLATFORM = 1;
     /** 积分成本单价：1 积分 = 0.01 元（营销成本估算，TODO 接营销模块精确成本） */
     private static final BigDecimal POINTS_COST_UNIT = new BigDecimal("0.01");
 
@@ -300,6 +302,8 @@ public class SettlementServiceImpl implements SettlementService {
         BigDecimal pointsCostPlatform = BigDecimal.ZERO;
         BigDecimal couponCost = BigDecimal.ZERO;
         BigDecimal couponCostPlatform = BigDecimal.ZERO;
+        BigDecimal promotionCostStore = BigDecimal.ZERO;
+        BigDecimal promotionCostPlatform = BigDecimal.ZERO;
 
         List<SettlementItem> items = new ArrayList<>();
         for (SettlementMapper.OrderRow o : orders) {
@@ -354,6 +358,19 @@ public class SettlementServiceImpl implements SettlementService {
                             SettlementItem.DIR_DEDUCT, coupon, "本店券成本"));
                 }
             }
+            // 活动成本归属（v30）：平台活动由平台补贴（不减店铺应付），本店活动由店铺承担
+            BigDecimal promo = nz(o.getPromotionDiscount());
+            if (promo.signum() > 0) {
+                if (o.getPromotionScope() != null && o.getPromotionScope() == PROMOTION_SCOPE_PLATFORM) {
+                    promotionCostPlatform = promotionCostPlatform.add(promo);
+                    items.add(item(s.getId(), o, SettlementItem.ITEM_PROMOTION_PLATFORM,
+                            SettlementItem.DIR_PLATFORM, promo, "平台活动补贴（平台承担）"));
+                } else {
+                    promotionCostStore = promotionCostStore.add(promo);
+                    items.add(item(s.getId(), o, SettlementItem.ITEM_PROMOTION_STORE,
+                            SettlementItem.DIR_DEDUCT, promo, "本店活动成本"));
+                }
+            }
         }
 
         s.setTotalAmount(total);
@@ -363,10 +380,13 @@ public class SettlementServiceImpl implements SettlementService {
         s.setPointsCostPlatform(pointsCostPlatform);
         s.setCouponCostStore(couponCost);
         s.setCouponCostPlatform(couponCostPlatform);
+        s.setPromotionCostStore(promotionCostStore);
+        s.setPromotionCostPlatform(promotionCostPlatform);
         s.setRefundAdjust(BigDecimal.ZERO);
         s.setAdjustAmount(BigDecimal.ZERO);
         s.setFinalAmount(total.subtract(commission).subtract(pointsDeduct)
-                .subtract(pointsCostStore).subtract(couponCost).setScale(2, RoundingMode.HALF_UP));
+                .subtract(pointsCostStore).subtract(couponCost)
+                .subtract(promotionCostStore).setScale(2, RoundingMode.HALF_UP));
         s.setAutoConfirmAt(LocalDateTime.now().plusHours(72));
 
         settlementMapper.insert(s);
@@ -459,6 +479,8 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPointsCostPlatform(r.getPointsCostPlatform());
         vo.setCouponCostStore(r.getCouponCostStore());
         vo.setCouponCostPlatform(r.getCouponCostPlatform());
+        vo.setPromotionCostStore(r.getPromotionCostStore());
+        vo.setPromotionCostPlatform(r.getPromotionCostPlatform());
         vo.setRefundAdjust(r.getRefundAdjust());
         vo.setAdjustAmount(r.getAdjustAmount());
         vo.setFinalAmount(r.getFinalAmount());
@@ -491,6 +513,8 @@ public class SettlementServiceImpl implements SettlementService {
         vo.setPointsCostPlatform(s.getPointsCostPlatform());
         vo.setCouponCostStore(s.getCouponCostStore());
         vo.setCouponCostPlatform(s.getCouponCostPlatform());
+        vo.setPromotionCostStore(s.getPromotionCostStore());
+        vo.setPromotionCostPlatform(s.getPromotionCostPlatform());
         vo.setRefundAdjust(s.getRefundAdjust());
         vo.setAdjustAmount(s.getAdjustAmount());
         vo.setFinalAmount(s.getFinalAmount());

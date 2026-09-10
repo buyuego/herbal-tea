@@ -55,6 +55,12 @@ public class SettlementPageVO {
     @Schema(description = "平台券补贴（v28，平台承担）")
     private BigDecimal couponCostPlatform;
 
+    /** 本店活动成本（v30，店铺承担） */
+    private BigDecimal promotionCostStore;
+
+    /** 平台活动补贴（v30，平台承担） */
+    private BigDecimal promotionCostPlatform;
+
     @Schema(description = "退款冲正")
     private BigDecimal refundAdjust;
 

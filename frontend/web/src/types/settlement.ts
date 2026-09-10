@@ -41,6 +41,9 @@ export const ITEM_TYPE: Record<number, string> = {
   6: '本店券成本',
   7: '退款冲正',
   8: '调整单',
+  9: '平台券补贴',
+  10: '本店活动成本',
+  11: '平台活动补贴',
 }
 
 /** 明细行方向 */
@@ -79,6 +82,10 @@ export interface SettlementDetail {
   couponCostStore: string
   /** 平台券补贴（v28，平台承担，不计入店铺应付） */
   couponCostPlatform: string
+  /** 本店活动成本（v30，店铺承担） */
+  promotionCostStore: string
+  /** 平台活动补贴（v30，平台承担，不计入店铺应付） */
+  promotionCostPlatform: string
   refundAdjust: string
   adjustAmount: string
   finalAmount: string

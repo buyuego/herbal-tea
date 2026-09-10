@@ -80,6 +80,15 @@ public class Order extends BaseEntity {
     /** 券归属：0无券 / 1平台券（平台承担）/ 2本店券（店铺承担）（v28，V14 补列） */
     private Integer couponScope;
 
+    /** 命中的促销活动 id（v30，V15 补列；未命中为 NULL） */
+    private Long promotionId;
+
+    /** 活动优惠金额（v30，V15 补列） */
+    private BigDecimal promotionDiscount;
+
+    /** 活动归属：0无活动 / 1平台活动（平台承担）/ 2本店活动（店铺承担）（v30，V15 补列） */
+    private Integer promotionScope;
+
     /** 积分抵扣数量 */
     private Long pointsDeduct;
 

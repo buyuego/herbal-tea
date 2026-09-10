@@ -36,6 +36,8 @@ Page({
         order: Object.assign({}, o, {
           totalAmountText: fmt.price(o.totalAmount),
           couponAmountText: fmt.price(o.couponAmount),
+          promotionDiscountText: fmt.price(o.promotionDiscount),
+          hasPromotion: Number(o.promotionDiscount || 0) > 0,
           pointsDeductAmountText: fmt.price(o.pointsDeductAmount),
           payAmountText: fmt.price(o.payAmount),
           createdText: fmt.time(o.createdAt),

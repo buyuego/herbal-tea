@@ -1,6 +1,7 @@
 const app = getApp()
 const storeApi = require('../../api/store')
 const productApi = require('../../api/product')
+const marketingApi = require('../../api/marketing')
 
 Page({
   data: {
@@ -10,6 +11,7 @@ Page({
     categories: [],
     categoryId: 0,
     products: [],
+    promotions: [],
     total: 0,
     page: 1,
     size: 10,
@@ -27,6 +29,7 @@ Page({
     // 门店在其他页被切换过 → 货架需要重载
     if (this.data.storeId && this.data.storeId !== this._loadedStoreId) {
       this.loadCategories()
+      this.loadPromotions()
       this.reload()
     }
   },
@@ -49,7 +52,22 @@ Page({
     }
     this.setData({ storeName: app.globalData.store.storeName, storeId })
     await this.loadCategories()
+    this.loadPromotions()
     this.reload()
+  },
+
+  /** 门店生效活动（平台活动 + 本店活动）；失败不阻塞商品浏览 */
+  async loadPromotions() {
+    const storeId = this.data.storeId
+    if (!storeId) {
+      this.setData({ promotions: [] })
+      return
+    }
+    try {
+      this.setData({ promotions: (await marketingApi.activePromotions(storeId)) || [] })
+    } catch (e) {
+      this.setData({ promotions: [] })
+    }
   },
 
   async loadStores() {
@@ -80,6 +98,7 @@ Page({
         const s = stores[res.tapIndex]
         app.setStore({ id: s.id, storeName: s.storeName })
         this.setData({ storeName: s.storeName, storeId: s.id })
+        this.loadPromotions()
         this.reload()
       },
       fail: () => {},

@@ -6,6 +6,14 @@
   <text class="store-switch">切换 ›</text>
 </view>
 
+<view class="promo-bar" wx:if="{{promotions.length}}">
+  <view class="promo-item" wx:for="{{promotions}}" wx:key="id">
+    <text class="promo-tag">{{item.scopeDesc}}</text>
+    <text class="promo-title">{{item.title}}</text>
+    <text class="promo-rule">{{item.ruleDesc}}</text>
+  </view>
+</view>
+
 <scroll-view class="cate-bar" scroll-x enable-flex>
   <view class="cate {{categoryId === 0 ? 'cate-active' : ''}}" data-id="0" bindtap="onCate">全部</view>
   <view

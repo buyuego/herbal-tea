@@ -201,9 +201,11 @@
           <el-descriptions-item label="积分抵扣">- ¥{{ Number(detail.pointsDeductAmount).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="门店积分成本">- ¥{{ Number(detail.pointsCostStore).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="本店券成本">- ¥{{ Number(detail.couponCostStore).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="本店活动成本">- ¥{{ Number(detail.promotionCostStore).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="退款冲正">- ¥{{ Number(detail.refundAdjust).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="平台券补贴(不计入)">{{ Number(detail.couponCostPlatform).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="平台积分补贴(不计入)">{{ Number(detail.pointsCostPlatform).toFixed(2) }}</el-descriptions-item>
+          <el-descriptions-item label="平台活动补贴(不计入)">{{ Number(detail.promotionCostPlatform).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="调整单">¥{{ Number(detail.adjustAmount).toFixed(2) }}</el-descriptions-item>
           <el-descriptions-item label="实际到账">
             <span class="amount-main">¥{{ Number(detail.finalAmount).toFixed(2) }}</span>

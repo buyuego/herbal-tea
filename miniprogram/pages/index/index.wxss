@@ -7,6 +7,39 @@
   padding: 24rpx 30rpx;
 }
 
+/* 门店生效活动横幅（v30） */
+.promo-bar {
+  background: #fff8e6;
+  padding: 16rpx 30rpx;
+}
+
+.promo-item {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  padding: 8rpx 0;
+}
+
+.promo-tag {
+  flex: none;
+  font-size: 20rpx;
+  color: #b8860b;
+  border: 1rpx solid #e6c34a;
+  border-radius: 6rpx;
+  padding: 2rpx 8rpx;
+}
+
+.promo-title {
+  font-size: 26rpx;
+  color: #8a6d1a;
+  font-weight: 600;
+}
+
+.promo-rule {
+  font-size: 24rpx;
+  color: #b8860b;
+}
+
 .store-left {
   display: flex;
   flex-direction: column;

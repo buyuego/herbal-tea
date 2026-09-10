@@ -10,6 +10,9 @@ import com.herbaltea.module.marketing.dto.CouponSaveRequest;
 import com.herbaltea.module.marketing.dto.CouponVO;
 import com.herbaltea.module.marketing.dto.MyPointsVO;
 import com.herbaltea.module.marketing.dto.PointRecordVO;
+import com.herbaltea.module.marketing.dto.PromotionQuery;
+import com.herbaltea.module.marketing.dto.PromotionSaveRequest;
+import com.herbaltea.module.marketing.dto.PromotionVO;
 import com.herbaltea.module.marketing.dto.UserCouponVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -26,14 +29,16 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
- * 营销接口（B 端后台，v27 积分 / v28 优惠券）
+ * 营销接口（B 端后台，v27 积分 / v28 优惠券 / v30 促销活动）
  *
  * <p>积分过期回收由 {@code PointsExpireTask} 每日 03:00 自动执行，
  * {@code /admin/points/expire} 供运维手动补偿，幂等可重复调用。
+ * <p>活动到点结束由 {@code PromotionCloseTask} 每 5 分钟扫描。
  */
-@Tag(name = "营销", description = "积分过期回收（手动触发） / 优惠券模板与领券")
+@Tag(name = "营销", description = "积分过期回收（手动触发） / 优惠券模板与领券 / 促销活动")
 @RestController
 @RequestMapping("/api/marketing")
 @RequiredArgsConstructor
@@ -42,6 +47,8 @@ public class MarketingController {
     private final MarketingService marketingService;
 
     private final CouponService couponService;
+
+    private final PromotionService promotionService;
 
     // ==================== 积分 ====================
 
@@ -131,6 +138,57 @@ public class MarketingController {
         return Result.ok(couponService.pageUserCoupons(userId, status, page, size));
     }
 
+    // ==================== 促销活动（v30） ====================
+
+    @Operation(summary = "活动分页", description = "关键词/类型/归属/门店/状态筛选；含规则摘要与当前是否生效")
+    @GetMapping("/admin/promotions")
+    @RequirePermission("menu:marketing")
+    public Result<IPage<PromotionVO>> pagePromotions(@ModelAttribute PromotionQuery query) {
+        return Result.ok(promotionService.pagePromotions(query));
+    }
+
+    @Operation(summary = "活动详情")
+    @GetMapping("/admin/promotions/{id}")
+    @RequirePermission("menu:marketing")
+    public Result<PromotionVO> getPromotion(@PathVariable Long id) {
+        return Result.ok(promotionService.getPromotion(id));
+    }
+
+    @Operation(summary = "创建活动", description = "创建后为「草稿」；门店账号只能建本店活动（自动归属本店），平台活动仅总部可建")
+    @PostMapping("/admin/promotions")
+    @RequirePermission("marketing:promotion")
+    @AuditLog(action = "创建促销活动")
+    public Result<Long> createPromotion(@Valid @RequestBody PromotionSaveRequest req) {
+        return Result.ok(promotionService.createPromotion(req, currentStoreId()));
+    }
+
+    @Operation(summary = "编辑活动", description = "仅「草稿」状态可编辑")
+    @PutMapping("/admin/promotions/{id}")
+    @RequirePermission("marketing:promotion")
+    @AuditLog(action = "编辑促销活动")
+    public Result<Void> updatePromotion(@PathVariable Long id, @Valid @RequestBody PromotionSaveRequest req) {
+        promotionService.updatePromotion(id, req, currentStoreId());
+        return Result.ok();
+    }
+
+    @Operation(summary = "发布活动", description = "草稿 → 进行中（0→1）；结束时间已过则拒绝发布")
+    @PostMapping("/admin/promotions/{id}/publish")
+    @RequirePermission("marketing:promotion")
+    @AuditLog(action = "发布促销活动")
+    public Result<Void> publishPromotion(@PathVariable Long id) {
+        promotionService.publishPromotion(id);
+        return Result.ok();
+    }
+
+    @Operation(summary = "结束活动", description = "进行中 → 已结束（1→2）；未到结束时间也可提前结束")
+    @PostMapping("/admin/promotions/{id}/stop")
+    @RequirePermission("marketing:promotion")
+    @AuditLog(action = "结束促销活动")
+    public Result<Void> stopPromotion(@PathVariable Long id) {
+        promotionService.stopPromotion(id);
+        return Result.ok();
+    }
+
     /** 当前登录主体的门店 id（总部账号为 null） */
     private Long currentStoreId() {
         UserContext ctx = UserContext.get();
@@ -169,5 +227,11 @@ public class MarketingController {
             @RequestParam(defaultValue = "10") long size) {
         return Result.ok(couponService.pageMyCoupons(
                 UserContext.userId(), storeId, usableAmount, status, page, size));
+    }
+
+    @Operation(summary = "门店生效活动", description = "C 端：平台活动 + 该门店本店活动（进行中且时间窗口命中）；storeId 不传仅返回平台活动")
+    @GetMapping("/promotions/active")
+    public Result<List<PromotionVO>> activePromotions(@RequestParam(required = false) Long storeId) {
+        return Result.ok(promotionService.listActive(storeId));
     }
 }

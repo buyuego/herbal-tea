@@ -35,7 +35,9 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             SELECT s.id, s.settle_no, s.store_id, st.store_name, s.period, s.type,
                    s.order_count, s.total_amount, s.commission_amount,
                    s.points_deduct_amount, s.points_cost_store, s.points_cost_platform,
-                   s.coupon_cost_store, s.refund_adjust, s.adjust_amount, s.final_amount,
+                   s.coupon_cost_store, s.coupon_cost_platform,
+                   s.promotion_cost_store, s.promotion_cost_platform,
+                   s.refund_adjust, s.adjust_amount, s.final_amount,
                    s.confirm_status, s.status, s.auto_confirm_at, s.confirmed_at,
                    s.reviewed_by, s.paid_at, s.payout_no, s.dispute_note,
                    s.created_at, s.version, s.parent_settlement_id
@@ -152,7 +154,8 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
             <script>
             SELECT o.id, o.order_no, o.store_id, o.total_amount, o.pay_amount,
                    o.points_deduct_amount, o.points_earned, o.points_source,
-                   o.coupon_amount, o.coupon_scope, o.commission_rate, o.finished_at
+                   o.coupon_amount, o.coupon_scope, o.promotion_discount, o.promotion_scope,
+                   o.commission_rate, o.finished_at
             FROM orders o
             WHERE o.store_id = #{storeId} AND o.status = 90
               AND NOT EXISTS (
@@ -233,6 +236,10 @@ public interface SettlementMapper extends BaseMapper<Settlement> {
         private java.math.BigDecimal couponAmount;
         /** 券归属：0无券 / 1平台券 / 2本店券（v28） */
         private java.lang.Integer couponScope;
+        /** 活动优惠金额（v30） */
+        private java.math.BigDecimal promotionDiscount;
+        /** 活动归属：0无活动 / 1平台活动 / 2本店活动（v30） */
+        private java.lang.Integer promotionScope;
         private java.math.BigDecimal commissionRate;
         private java.time.LocalDateTime finishedAt;
     }

@@ -21,7 +21,7 @@ def show(title, sql):
 show("store_products", "SELECT id, store_id, product_id, sku_id, price, status, daily_quota FROM store_products")
 show("stores", "SELECT id, store_name, status FROM stores")
 show("users", "SELECT id, openid, nickname, status, token_version FROM users")
-show("product_skus", "SELECT id, product_id, spec, price, stock FROM product_skus")
+show("product_skus", "SELECT id, product_id, specs, price, stock FROM product_skus")
 show("user_addresses", "SELECT id, user_id, receiver_name, phone, is_default FROM user_addresses")
 cur.close()
 conn.close()

@@ -38,6 +38,10 @@
         <text class="muted">商品金额</text>
         <text>¥{{order.totalAmountText}}</text>
       </view>
+      <view class="between amount-line" wx:if="{{order.hasPromotion}}">
+        <text class="muted">活动优惠</text>
+        <text>-¥{{order.promotionDiscountText}}</text>
+      </view>
       <view class="between amount-line">
         <text class="muted">优惠券</text>
         <text>-¥{{order.couponAmountText}}</text>

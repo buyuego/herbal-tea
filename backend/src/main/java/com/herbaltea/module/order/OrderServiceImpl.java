@@ -12,7 +12,9 @@ import com.herbaltea.infrastructure.outbox.OutboxEventType;
 import com.herbaltea.infrastructure.outbox.OutboxPublisher;
 import com.herbaltea.module.marketing.CouponService;
 import com.herbaltea.module.marketing.MarketingService;
+import com.herbaltea.module.marketing.PromotionService;
 import com.herbaltea.module.marketing.dto.CouponUseResult;
+import com.herbaltea.module.marketing.dto.PromotionMatch;
 import com.herbaltea.module.order.dto.CreateOrderRequest;
 import com.herbaltea.module.order.dto.OrderCreateVO;
 import com.herbaltea.module.order.dto.OrderDetailVO;
@@ -78,6 +80,9 @@ public class OrderServiceImpl implements OrderService {
     /** 券归属：无券（v28；1平台券 / 2本店券） */
     private static final int COUPON_SCOPE_NONE = 0;
 
+    /** 活动归属：无活动（v30；1平台活动 / 2本店活动） */
+    private static final int PROMOTION_SCOPE_NONE = 0;
+
     private static final DateTimeFormatter NO_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
     private final OrderMapper orderMapper;
@@ -88,6 +93,7 @@ public class OrderServiceImpl implements OrderService {
     private final ProductService productService;
     private final MarketingService marketingService;
     private final CouponService couponService;
+    private final PromotionService promotionService;
     private final OutboxPublisher outboxPublisher;
     private final IdempotencyService idempotencyService;
     private final ObjectMapper objectMapper;
@@ -126,17 +132,29 @@ public class OrderServiceImpl implements OrderService {
             throw new BizException("库存不足");
         }
 
-        // 5. 金额计算（v27 积分抵扣 / v28 优惠券核销，均走营销模块原子操作）
+        // 5. 金额计算（固定顺序 v30 活动 → v28 券 → v27 积分，后序门槛按前序扣减后的金额）
         BigDecimal unitPrice = sku.price();
         BigDecimal subtotal = unitPrice.multiply(BigDecimal.valueOf(req.qty()));
         String orderNo = generateNo("HT");
 
-        // 5.1 优惠券核销：门槛与折扣按商品小计计算；原子核销（status 0→1），order_id 稍后回填
+        // 5.0 活动计价（v30）：一单最多命中一个活动（取优惠最大者），活动与券、积分可叠加
+        PromotionMatch promo = promotionService.matchBest(req.storeId(), subtotal);
+        BigDecimal promotionDiscount = BigDecimal.ZERO;
+        Long promotionId = null;
+        int promotionScope = PROMOTION_SCOPE_NONE;
+        if (promo != null) {
+            promotionDiscount = promo.discountAmount();
+            promotionId = promo.promotionId();
+            promotionScope = promo.scope() == null ? PROMOTION_SCOPE_NONE : promo.scope();
+        }
+        BigDecimal afterPromotion = subtotal.subtract(promotionDiscount).max(BigDecimal.ZERO);
+
+        // 5.1 优惠券核销：门槛与折扣按「活动后金额」计算；原子核销（status 0→1），order_id 稍后回填
         BigDecimal couponAmount = BigDecimal.ZERO;
         Integer couponScope = COUPON_SCOPE_NONE;
         Long userCouponId = req.userCouponId();
         if (userCouponId != null) {
-            CouponUseResult used = couponService.useCoupon(userCouponId, userId, req.storeId(), subtotal);
+            CouponUseResult used = couponService.useCoupon(userCouponId, userId, req.storeId(), afterPromotion);
             couponAmount = used.getDiscountAmount();
             couponScope = used.getScope();
         }
@@ -148,14 +166,15 @@ public class OrderServiceImpl implements OrderService {
             pointsDeductAmount = BigDecimal.valueOf(usePoints)
                     .multiply(POINTS_DEDUCT_UNIT)
                     .setScale(2, RoundingMode.HALF_UP);
-            if (pointsDeductAmount.compareTo(subtotal) > 0) {
+            if (pointsDeductAmount.compareTo(afterPromotion) > 0) {
                 throw new BizException("抵扣积分超过订单金额：" + usePoints + " 积分可抵 ¥"
-                        + pointsDeductAmount + "，订单仅 ¥" + subtotal);
+                        + pointsDeductAmount + "，订单仅 ¥" + afterPromotion);
             }
             // 原子扣减（余额不足抛业务异常 → 下单事务整体回滚，库存一并还原）
             marketingService.usePoints(userId, (int) usePoints, orderNo);
         }
-        BigDecimal payAmount = subtotal.subtract(couponAmount).subtract(pointsDeductAmount).max(BigDecimal.ZERO);
+        BigDecimal payAmount = afterPromotion.subtract(couponAmount).subtract(pointsDeductAmount)
+                .max(BigDecimal.ZERO);
         // 赠送积分按「券与积分抵扣后实付」向下取整（1 元 = 1 积分，D15 规则复核）
         long pointsEarned = payAmount.setScale(0, RoundingMode.DOWN).longValue();
 
@@ -169,6 +188,9 @@ public class OrderServiceImpl implements OrderService {
         order.setTotalAmount(subtotal);
         order.setCouponAmount(couponAmount);
         order.setCouponScope(couponScope);
+        order.setPromotionId(promotionId);
+        order.setPromotionDiscount(promotionDiscount);
+        order.setPromotionScope(promotionScope);
         order.setPointsDeduct(usePoints);
         order.setPointsDeductAmount(pointsDeductAmount);
         order.setPointsEarned(pointsEarned);
@@ -209,8 +231,9 @@ public class OrderServiceImpl implements OrderService {
         payRec.setStatus(PaymentRecord.STATUS_PENDING);
         paymentRecordMapper.insert(payRec);
 
-        log.info("下单成功 orderNo={} userId={} storeId={} skuId={} qty={} pay={}",
-                order.getOrderNo(), userId, req.storeId(), req.skuId(), req.qty(), payAmount);
+        log.info("下单成功 orderNo={} userId={} storeId={} skuId={} qty={} 活动优惠={} 券优惠={} 积分抵扣={} 实付={}",
+                order.getOrderNo(), userId, req.storeId(), req.skuId(), req.qty(),
+                promotionDiscount, couponAmount, pointsDeductAmount, payAmount);
         return new OrderCreateVO(order.getOrderNo(), payRec.getPayNo(), payAmount, order.getExpireAt());
     }
 
@@ -397,6 +420,8 @@ public class OrderServiceImpl implements OrderService {
         vo.setWarehouseStatus(order.getWarehouseStatus());
         vo.setTotalAmount(order.getTotalAmount());
         vo.setCouponAmount(order.getCouponAmount());
+        vo.setPromotionId(order.getPromotionId());
+        vo.setPromotionDiscount(order.getPromotionDiscount());
         vo.setPointsDeductAmount(order.getPointsDeductAmount());
         vo.setPointsEarned(order.getPointsEarned());
         vo.setPayAmount(order.getPayAmount());

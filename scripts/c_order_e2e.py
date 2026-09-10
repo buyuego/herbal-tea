@@ -36,6 +36,21 @@ def stock():
     return rows[0][2]
 
 
+def x(sql, args=None):
+    """执行写操作（清理用）"""
+    conn = db()
+    cur = conn.cursor()
+    cur.execute(sql, args)
+    cur.close()
+    conn.close()
+
+
+def max_id(table, where="1=1"):
+    """id 水位：清理时按 id > 水位 精确删除，避免误伤历史数据"""
+    cols, rows = q(f"SELECT COALESCE(MAX(id), 0) FROM {table} WHERE {where}")
+    return rows[0][0]
+
+
 def order_status(order_no):
     cols, rows = q("SELECT id, order_no, status FROM orders WHERE order_no=%s", (order_no,))
     return rows[0] if rows else None
@@ -77,6 +92,12 @@ def main():
     # 基线库存动态取值：SKU 6 的库存会被历史联测/手工调整影响，不再硬编码 300
     base = stock()
     print(f"===== 初始库存（基线）: {base} =====")
+
+    # 清理水位（脚本必须幂等可重跑：结束按 id 水位精确回收本脚本产生的数据）
+    pr_seq0 = max_id("point_records")
+    pa_seq0 = max_id("user_points_accounts")
+    inv_seq0 = max_id("inventory_records")
+    outbox_seq0 = max_id("event_outbox")
 
     # 1. 微信登录
     r = s.post(f"{BASE}/api/user/wx-login", json={
@@ -198,6 +219,29 @@ def main():
     print(f"订单#2 {order_no2}：10待支付 → 30待发货 → 40已发货 → 50已签收 ✅")
     print(f"幂等：同 Key 重放 40901 拦截 ✅；待发货取消拒绝 ✅；重复签收拒绝 ✅")
     print(f"最终库存: {stock()}（应 {base - 2}）")
+
+    # ---------- 清理回基线（幂等可重跑） ----------
+    print("\n===== 清理 =====")
+    for oid, ono in ((oid1, order_no1), (oid2, order_no2)):
+        if oid is None:
+            continue
+        for t in ("payment_records", "order_shipping_logs", "order_items", "refund_records"):
+            x(f"DELETE FROM {t} WHERE order_id=%s", (oid,))
+        x("DELETE FROM orders WHERE id=%s", (oid,))
+        x("DELETE FROM event_outbox WHERE id > %s AND biz_key LIKE %s", (outbox_seq0, f"%{ono}%"))
+        print(f"  已删除订单 {ono}（id={oid}）")
+    # 积分（本脚本支付链路会在 user 3 上产生积分）：按水位精确回收
+    x("DELETE FROM point_records WHERE id > %s", (pr_seq0,))
+    x("DELETE FROM user_points_accounts WHERE id > %s", (pa_seq0,))
+    # 库存与流水还原
+    x("UPDATE product_skus SET stock=%s WHERE id=6", (base,))
+    x("DELETE FROM inventory_records WHERE id > %s", (inv_seq0,))
+    x("DELETE FROM event_outbox WHERE id > %s AND status=0", (outbox_seq0,))
+    print(f"  库存还原 SKU 6 → {base}，清理新增积分/库存流水/outbox")
+    print(f"  最终：订单数={q('SELECT COUNT(*) FROM orders')[1][0][0]}"
+          f" 积分账户={q('SELECT COUNT(*) FROM user_points_accounts')[1][0][0]}"
+          f" 积分流水={q('SELECT COUNT(*) FROM point_records')[1][0][0]}"
+          f" pending_outbox={q('SELECT COUNT(*) FROM event_outbox WHERE status=0')[1][0][0]}")
 
 
 if __name__ == "__main__":

@@ -20,4 +20,12 @@ function myCoupons(params) {
   return request.get('/api/marketing/coupons/my', params)
 }
 
-module.exports = { myPoints, myPointRecords, myCoupons }
+/**
+ * 门店生效活动（平台活动 + 该门店本店活动，进行中且时间窗口命中）
+ * @param {number} storeId 不传仅返回平台活动
+ */
+function activePromotions(storeId) {
+  return request.get('/api/marketing/promotions/active', { storeId })
+}
+
+module.exports = { myPoints, myPointRecords, myCoupons, activePromotions }
