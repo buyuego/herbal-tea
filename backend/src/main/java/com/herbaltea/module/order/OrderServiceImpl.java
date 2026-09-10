@@ -422,6 +422,50 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
+    public OrderDetailVO getMyOrderDetail(Long orderId, Long userId) {
+        OrderDetailVO vo = getOrderDetail(orderId);
+        // 归属校验：C 端只能看自己的订单（防止遍历 orderId 越权读取他人收货信息）
+        if (userId == null || !userId.equals(vo.getUserId())) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权查看该订单");
+        }
+        return vo;
+    }
+
+    @Override
+    @Transactional
+    public void payOrder(Long orderId, Long userId) {
+        Order order = orderMapper.selectById(orderId);
+        if (order == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "订单不存在");
+        }
+        if (userId == null || !userId.equals(order.getUserId())) {
+            throw new BizException(ResultCode.FORBIDDEN, "无权支付该订单");
+        }
+        // 幂等：已支付及之后的正常流程直接返回（重复点击/网络重试不报错）
+        int st = order.getStatus();
+        if (st == Order.STATUS_PAID || st == Order.STATUS_PENDING_SHIPMENT
+                || st == Order.STATUS_SHIPPED || st == Order.STATUS_SIGNED
+                || st == Order.STATUS_COMPLETED) {
+            log.info("订单已支付，幂等返回 orderNo={}", order.getOrderNo());
+            return;
+        }
+        if (st != Order.STATUS_PENDING_PAYMENT) {
+            throw BizException.conflict("订单当前状态不可支付，请刷新后重试");
+        }
+        if (order.getExpireAt() != null && order.getExpireAt().isBefore(LocalDateTime.now())) {
+            throw BizException.conflict("订单已超时，请重新下单");
+        }
+        PaymentRecord pay = paymentRecordMapper.selectOne(new LambdaQueryWrapper<PaymentRecord>()
+                .eq(PaymentRecord::getOrderId, orderId).last("LIMIT 1"));
+        if (pay == null) {
+            throw new BizException(ResultCode.NOT_FOUND, "支付单不存在");
+        }
+        // TODO 生产：调用微信支付统一下单（JSAPI），返回 prepay_id 等参数由前端 wx.requestPayment 调起；
+        //      当前为 dev 直通（等价于支付成功回调），便于本地与小程序联调。
+        handlePaid(pay.getPayNo(), "MOCK-" + System.currentTimeMillis());
+    }
+
+    @Override
     public IPage<Order> pageOrders(OrderPageQuery query) {
         long size = Math.min(query.getSize(), 100);
         LambdaQueryWrapper<Order> wrapper = new LambdaQueryWrapper<Order>()

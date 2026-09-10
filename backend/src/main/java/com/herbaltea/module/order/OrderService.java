@@ -39,6 +39,15 @@ public interface OrderService {
     /** 支付成功回调（微信验签后调用）：10→20→30 + 支付单置成功 + 发布 order_paid */
     void handlePaid(String outTradeNo, String transactionId);
 
+    /**
+     * C 端发起支付（v29）：
+     * 校验订单归属与状态后推进支付。
+     *
+     * <p>当前为 dev 直通实现（等价于支付回调），生产环境需替换为微信支付统一下单
+     * 并返回 JSAPI 支付参数，由前端调起 wx.requestPayment 后走真实回调。
+     */
+    void payOrder(Long orderId, Long userId);
+
     // ==================== 状态推进 ====================
 
     /** 总部发货：30→40 + 物流单 + 轨迹 + order_shipped */
@@ -57,6 +66,9 @@ public interface OrderService {
 
     /** 订单详情（订单头 + 明细 + 支付单） */
     OrderDetailVO getOrderDetail(Long orderId);
+
+    /** C 端订单详情（v29：归属校验，非本人订单抛 403） */
+    OrderDetailVO getMyOrderDetail(Long orderId, Long userId);
 
     /** B 端分页查询（订单号/用户/门店/状态） */
     IPage<Order> pageOrders(OrderPageQuery query);

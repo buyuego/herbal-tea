@@ -50,8 +50,17 @@ public interface CouponService {
      */
     Long grantCoupon(Long couponId, Long userId);
 
-    /** 某会员的持券列表（status 为 null 查全部） */
+    /** 某会员的持券列表（B 端会员详情用，status 为 null 查全部） */
     IPage<UserCouponVO> pageUserCoupons(Long userId, Integer status, long page, long size);
+
+    /**
+     * C 端「我的券包」（v29）：按状态 / 门店 / 订单金额过滤。
+     *
+     * @param storeId      只返回本店可用的券（平台券通用）；null = 不过滤门店
+     * @param usableAmount 订单商品小计，只返回门槛已满足的券；null = 不过滤门槛
+     */
+    IPage<UserCouponVO> pageMyCoupons(Long userId, Long storeId, BigDecimal usableAmount,
+                                      Integer status, long page, long size);
 
     /** 某券模板的领取记录 */
     IPage<UserCouponVO> pageCouponGrants(Long couponId, long page, long size);

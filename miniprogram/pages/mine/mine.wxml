@@ -1,0 +1,59 @@
+<view class="header">
+  <image wx:if="{{profile.avatarUrl}}" class="avatar" src="{{profile.avatarUrl}}" mode="aspectFill" />
+  <view wx:else class="avatar avatar-fallback">茶</view>
+  <view class="header-body">
+    <view class="nick">{{profile.nickname || '微信用户'}}</view>
+    <view class="phone">{{phoneText}}</view>
+  </view>
+</view>
+
+<view class="container">
+  <view class="card points-card">
+    <view class="between">
+      <text class="muted">我的积分</text>
+      <text class="muted">1 积分 = 0.01 元</text>
+    </view>
+    <view class="points-num">{{points.balance}}</view>
+    <view class="between muted">
+      <text>累计获得 {{points.totalEarned}}</text>
+      <text>已用 {{points.totalUsed}}</text>
+      <text>已过期 {{points.totalExpired}}</text>
+    </view>
+  </view>
+
+  <view class="card row-card" bindtap="toCoupons">
+    <text>我的优惠券</text>
+    <view>
+      <text class="muted">{{couponCount}} 张可用</text>
+      <text class="arrow"> ›</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="block-title">我的订单</view>
+    <view class="order-grid">
+      <view class="order-cell" data-status="10" bindtap="toOrders">
+        <view class="order-cell-name">待付款</view>
+      </view>
+      <view class="order-cell" data-status="30" bindtap="toOrders">
+        <view class="order-cell-name">待发货</view>
+      </view>
+      <view class="order-cell" data-status="40" bindtap="toOrders">
+        <view class="order-cell-name">待收货</view>
+      </view>
+      <view class="order-cell" data-status="" bindtap="toOrders">
+        <view class="order-cell-name">全部订单</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card row-card" bindtap="toAddress">
+    <text>收货地址</text>
+    <text class="arrow"> ›</text>
+  </view>
+
+  <view class="card row-card">
+    <text>当前门店</text>
+    <text class="muted">{{storeName}}</text>
+  </view>
+</view>

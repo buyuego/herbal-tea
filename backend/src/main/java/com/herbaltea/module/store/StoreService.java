@@ -5,6 +5,7 @@ import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
 import com.herbaltea.module.store.dto.StoreBindingVO;
+import com.herbaltea.module.store.dto.StoreBriefVO;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 
 import java.util.List;
@@ -85,4 +86,10 @@ public interface StoreService {
      * 写入一条退还流水（type=2, status=1, refunded_at）；同 biz_no 已退 → 40900。
      */
     void refundDeposit(Long depositId, Long operatorAdminId);
+
+    /**
+     * C 端门店列表（v29：小程序选店）：仅返回正常营业（status=1）的门店，
+     * 不含联系人/执照等敏感字段。
+     */
+    java.util.List<StoreBriefVO> listOpenStores();
 }

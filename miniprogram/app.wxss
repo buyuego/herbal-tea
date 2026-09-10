@@ -1,0 +1,76 @@
+/** 全局样式（主色调：茶绿 #2b7a5e） */
+page {
+  background: #f5f7fa;
+  font-size: 28rpx;
+  color: #303133;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', sans-serif;
+}
+
+.container {
+  padding: 20rpx;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin-bottom: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+}
+
+.between {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.muted {
+  color: #909399;
+  font-size: 24rpx;
+}
+
+.primary {
+  color: #2b7a5e;
+}
+
+.price {
+  color: #e6a23c;
+  font-weight: 600;
+}
+
+.btn-primary {
+  background: #2b7a5e;
+  color: #fff;
+  border-radius: 40rpx;
+  text-align: center;
+  padding: 20rpx 0;
+  font-size: 30rpx;
+}
+
+.btn-ghost {
+  border: 2rpx solid #2b7a5e;
+  color: #2b7a5e;
+  border-radius: 40rpx;
+  text-align: center;
+  padding: 18rpx 0;
+  font-size: 30rpx;
+}
+
+.empty {
+  text-align: center;
+  color: #909399;
+  padding: 80rpx 0;
+  font-size: 26rpx;
+}
+
+.loading {
+  text-align: center;
+  color: #909399;
+  padding: 30rpx 0;
+  font-size: 24rpx;
+}

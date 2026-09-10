@@ -9,6 +9,8 @@ import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
 import com.herbaltea.module.product.dto.ProductUpdateRequest;
+import com.herbaltea.module.product.dto.ShelfProductVO;
+import com.herbaltea.module.product.dto.ShelfQuery;
 import com.herbaltea.module.product.dto.SkuAddRequest;
 import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
@@ -116,4 +118,21 @@ public interface ProductService {
 
     /** 本店上架列表（联查商品/SKU 展示信息，status 为 null 查全部） */
     List<StoreProductVO> listStoreProducts(Long storeId, Integer status);
+
+    // ==================== C 端货架（v29，小程序） ====================
+
+    /**
+     * C 端货架商品分页（v29）：某门店在售商品（商品头 + 本店在售 SKU）。
+     *
+     * <p>在售 = 本店已上架 + 目录在售 + SKU 启用；分页粒度为「商品」；不含成本价等敏感字段。
+     */
+    IPage<ShelfProductVO> pageShelfProducts(ShelfQuery query);
+
+    /**
+     * C 端 SKU 详情（v29）：本店在售价 + 可售库存；未上架/已停用 → 40400。
+     */
+    SkuForSaleVO getShelfSku(Long skuId, Long storeId);
+
+    /** C 端商品详情（含配方/图集/富文本，仅本店在售商品；未上架抛 40400） */
+    ShelfProductVO getShelfProduct(Long productId, Long storeId);
 }

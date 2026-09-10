@@ -17,6 +17,9 @@ import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
 import com.herbaltea.module.product.dto.ProductUpdateRequest;
+import com.herbaltea.module.product.dto.ShelfProductVO;
+import com.herbaltea.module.product.dto.ShelfQuery;
+import com.herbaltea.module.product.dto.ShelfSkuVO;
 import com.herbaltea.module.product.dto.SkuAddRequest;
 import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
@@ -40,7 +43,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -261,7 +266,8 @@ public class ProductServiceImpl implements ProductService {
                 .eq(StoreProduct::getSkuId, skuId)
                 .last("LIMIT 1"));
         if (sp == null || sp.getStatus() == null || sp.getStatus() != 1) {
-            throw new BizException("该门店暂未上架此商品");
+            // C 端统一 40400：不暴露「未上架 / 已停用」等目录内部状态
+            throw new BizException(ResultCode.NOT_FOUND, "该门店暂未上架此商品");
         }
         return new SkuForSaleVO(sku.getId(), product.getId(), product.getName(),
                 product.getMainImage(), sku.getSpecs(), sp.getPrice(), sku.getStock());
@@ -422,6 +428,106 @@ public class ProductServiceImpl implements ProductService {
     @Override
     public List<StoreProductVO> listStoreProducts(Long storeId, Integer status) {
         return storeProductMapper.listStoreProducts(storeId, status);
+    }
+
+    // ==================== C 端货架（v29，小程序） ====================
+
+    @Override
+    public IPage<ShelfProductVO> pageShelfProducts(ShelfQuery query) {
+        if (query == null || query.getStoreId() == null || query.getStoreId() <= 0) {
+            throw new BizException(ResultCode.PARAM_ERROR, "请先选择门店");
+        }
+        long page = query.getPage() <= 0 ? 1 : query.getPage();
+        long size = Math.min(query.getSize() <= 0 ? 10 : query.getSize(), 50);
+        String keyword = (query.getKeyword() == null || query.getKeyword().isBlank())
+                ? null : query.getKeyword().trim();
+
+        // 1) 分页取商品 id（DISTINCT，分页粒度 = 商品）
+        List<Long> ids = storeProductMapper.pageShelfProductIds(
+                new org.apache.ibatis.session.RowBounds((int) ((page - 1) * size), (int) size),
+                query.getStoreId(), query.getCategoryId(), keyword);
+
+        List<ShelfProductVO> vos = new ArrayList<>();
+        if (!ids.isEmpty()) {
+            // 2) 按这批商品取本店在售 SKU，Service 层按商品聚合
+            List<StoreProductMapper.ShelfRow> rows =
+                    storeProductMapper.listShelfRows(query.getStoreId(), ids);
+            LinkedHashMap<Long, ShelfProductVO> grouped = new LinkedHashMap<>();
+            for (StoreProductMapper.ShelfRow r : rows) {
+                ShelfProductVO vo = grouped.computeIfAbsent(r.getProductId(), k -> {
+                    ShelfProductVO v = new ShelfProductVO();
+                    v.setProductId(r.getProductId());
+                    v.setName(r.getName());
+                    v.setSubtitle(r.getSubtitle());
+                    v.setMainImage(r.getMainImage());
+                    v.setSuggestedPrice(r.getSuggestedPrice());
+                    v.setCategoryId(r.getCategoryId());
+                    v.setSkus(new ArrayList<>());
+                    return v;
+                });
+                ShelfSkuVO sku = new ShelfSkuVO();
+                sku.setSkuId(r.getSkuId());
+                sku.setSkuCode(r.getSkuCode());
+                sku.setSpecs(r.getSpecs());
+                sku.setPrice(r.getPrice());
+                sku.setStock(r.getStock());
+                vo.getSkus().add(sku);
+            }
+            vos.addAll(grouped.values());
+        }
+
+        // 3) 组装分页结果（总数另查一次，与分页条件保持一致）
+        Page<ShelfProductVO> result = new Page<>(page, size);
+        result.setRecords(vos);
+        result.setTotal(countShelfProducts(query.getStoreId(), query.getCategoryId(), keyword));
+        return result;
+    }
+
+    @Override
+    public SkuForSaleVO getShelfSku(Long skuId, Long storeId) {
+        // 复用下单校验链：SKU 在售 → 商品在售 → 本店已上架（未过则抛 40000/40400）
+        return getSkuForSale(skuId, storeId);
+    }
+
+    @Override
+    public ShelfProductVO getShelfProduct(Long productId, Long storeId) {
+        if (storeId == null || storeId <= 0) {
+            throw new BizException("请先选择门店");
+        }
+        List<StoreProductMapper.ShelfRow> rows =
+                storeProductMapper.listShelfRowsForDetail(storeId, productId);
+        if (rows.isEmpty()) {
+            // 该店未上架 / 商品或 SKU 已停用：统一 40400，不暴露目录内部状态
+            throw new BizException(ResultCode.NOT_FOUND, "商品不存在或本店未上架");
+        }
+        ShelfProductVO vo = new ShelfProductVO();
+        vo.setSkus(new ArrayList<>());
+        for (StoreProductMapper.ShelfRow r : rows) {
+            if (vo.getProductId() == null) {
+                vo.setProductId(r.getProductId());
+                vo.setName(r.getName());
+                vo.setSubtitle(r.getSubtitle());
+                vo.setMainImage(r.getMainImage());
+                vo.setSuggestedPrice(r.getSuggestedPrice());
+                vo.setCategoryId(r.getCategoryId());
+                vo.setFormula(r.getFormula());
+                vo.setImages(r.getImages());
+                vo.setDetail(r.getDetail());
+            }
+            ShelfSkuVO sku = new ShelfSkuVO();
+            sku.setSkuId(r.getSkuId());
+            sku.setSkuCode(r.getSkuCode());
+            sku.setSpecs(r.getSpecs());
+            sku.setPrice(r.getPrice());
+            sku.setStock(r.getStock());
+            vo.getSkus().add(sku);
+        }
+        return vo;
+    }
+
+    /** 货架商品总数（与 pageShelfProductIds 同条件） */
+    private long countShelfProducts(Long storeId, Long categoryId, String keyword) {
+        return storeProductMapper.countShelfProducts(storeId, categoryId, keyword);
     }
 
     // ==================== 私有工具 ====================

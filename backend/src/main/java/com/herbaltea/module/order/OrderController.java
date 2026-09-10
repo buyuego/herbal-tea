@@ -128,4 +128,17 @@ public class OrderController {
         query.setUserId(UserContext.userId());
         return Result.ok(orderService.pageOrders(query));
     }
+
+    @Operation(summary = "订单详情（C 端）", description = "归属校验：非本人订单返回 403")
+    @GetMapping("/{orderId}")
+    public Result<OrderDetailVO> myOrderDetail(@PathVariable Long orderId) {
+        return Result.ok(orderService.getMyOrderDetail(orderId, UserContext.userId()));
+    }
+
+    @Operation(summary = "发起支付（C 端）", description = "dev 直通模拟支付推进（等价支付回调）；生产替换为微信支付统一下单 + wx.requestPayment")
+    @PostMapping("/{orderId}/pay")
+    public Result<Void> pay(@PathVariable Long orderId) {
+        orderService.payOrder(orderId, UserContext.userId());
+        return Result.ok();
+    }
 }

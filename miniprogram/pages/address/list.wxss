@@ -1,0 +1,47 @@
+.name {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.phone {
+  margin-left: 20rpx;
+}
+
+.tag {
+  font-size: 22rpx;
+  color: #2b7a5e;
+  border: 2rpx solid #2b7a5e;
+  border-radius: 6rpx;
+  padding: 2rpx 10rpx;
+}
+
+.addr {
+  margin-top: 12rpx;
+}
+
+.ops {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16rpx;
+  padding-top: 16rpx;
+  border-top: 2rpx solid #f5f7fa;
+}
+
+.op {
+  font-size: 24rpx;
+  color: #f56c6c;
+}
+
+.footer-space {
+  height: 150rpx;
+}
+
+.footer {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 16rpx 24rpx;
+  background: #fff;
+  border-top: 2rpx solid #f0f2f5;
+}

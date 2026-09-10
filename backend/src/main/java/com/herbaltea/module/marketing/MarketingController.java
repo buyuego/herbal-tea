@@ -8,6 +8,8 @@ import com.herbaltea.infrastructure.web.UserContext;
 import com.herbaltea.module.marketing.dto.CouponQuery;
 import com.herbaltea.module.marketing.dto.CouponSaveRequest;
 import com.herbaltea.module.marketing.dto.CouponVO;
+import com.herbaltea.module.marketing.dto.MyPointsVO;
+import com.herbaltea.module.marketing.dto.PointRecordVO;
 import com.herbaltea.module.marketing.dto.UserCouponVO;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -22,6 +24,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.math.BigDecimal;
 
 /**
  * 营销接口（B 端后台，v27 积分 / v28 优惠券）
@@ -135,5 +139,35 @@ public class MarketingController {
         }
         Long sid = ctx.getStoreId();
         return sid != null && sid > 0 ? sid : null;
+    }
+
+    // ==================== C 端（小程序，v29） ====================
+
+    @Operation(summary = "我的积分", description = "当前登录用户积分账户概览；从未产生往来时返回零值账户")
+    @GetMapping("/points/my")
+    public Result<MyPointsVO> myPoints() {
+        return Result.ok(MyPointsVO.of(marketingService.pointsAccount(UserContext.userId())));
+    }
+
+    @Operation(summary = "我的积分明细", description = "当前登录用户积分流水分页（changeType：1发放 / 2抵扣 / 3退款回收 / 4过期清零 / 5签到）")
+    @GetMapping("/points/my/records")
+    public Result<IPage<PointRecordVO>> myPointRecords(
+            @RequestParam(required = false) Integer changeType,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size) {
+        return Result.ok(marketingService.pagePointRecords(UserContext.userId(), changeType, page, size));
+    }
+
+    @Operation(summary = "我的券包",
+            description = "当前登录用户持券分页；storeId/usableAmount 用于下单页筛选「本单可用券」，status 不传查全部")
+    @GetMapping("/coupons/my")
+    public Result<IPage<UserCouponVO>> myCoupons(
+            @RequestParam(required = false) Integer status,
+            @RequestParam(required = false) Long storeId,
+            @RequestParam(required = false) BigDecimal usableAmount,
+            @RequestParam(defaultValue = "1") long page,
+            @RequestParam(defaultValue = "10") long size) {
+        return Result.ok(couponService.pageMyCoupons(
+                UserContext.userId(), storeId, usableAmount, status, page, size));
     }
 }

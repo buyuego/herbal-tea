@@ -206,6 +206,15 @@ public class CouponServiceImpl implements CouponService {
     }
 
     @Override
+    public IPage<UserCouponVO> pageMyCoupons(Long userId, Long storeId, BigDecimal usableAmount,
+                                             Integer status, long page, long size) {
+        IPage<UserCouponVO> p = userCouponMapper.pageMyCoupons(
+                new Page<>(normPage(page), normSize(size)), userId, storeId, usableAmount, status);
+        p.getRecords().forEach(this::fillUserCouponDesc);
+        return p;
+    }
+
+    @Override
     public IPage<UserCouponVO> pageCouponGrants(Long couponId, long page, long size) {
         IPage<UserCouponVO> p = userCouponMapper.pageByCoupon(
                 new Page<>(normPage(page), normSize(size)), couponId);

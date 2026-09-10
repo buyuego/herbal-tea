@@ -12,6 +12,7 @@ import com.herbaltea.module.store.dto.DepositVO;
 import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminVO;
 import com.herbaltea.module.store.dto.StoreBindingVO;
+import com.herbaltea.module.store.dto.StoreBriefVO;
 import com.herbaltea.module.store.dto.StoreProductReviewRow;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 import com.herbaltea.module.store.entity.FranchiseDeposit;
@@ -33,6 +34,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
@@ -308,6 +310,41 @@ public class StoreServiceImpl implements StoreService {
         franchiseDepositMapper.insert(refund);
         log.info("保证金退还: depositId={} storeId={} bizNo={} amount={} operator={}",
                 depositId, deposit.getStoreId(), deposit.getBizNo(), deposit.getAmount(), operatorAdminId);
+    }
+
+    // ==================== C 端门店列表（v29：小程序选店） ====================
+
+    @Override
+    public List<StoreBriefVO> listOpenStores() {
+        List<Store> open = storeMapper.selectList(new LambdaQueryWrapper<Store>()
+                .eq(Store::getStatus, Store.STATUS_OK)
+                .orderByAsc(Store::getId));
+        List<StoreBriefVO> vos = new ArrayList<>();
+        for (Store s : open) {
+            StoreBriefVO vo = new StoreBriefVO();
+            vo.setId(s.getId());
+            vo.setStoreNo(s.getStoreNo());
+            vo.setStoreName(s.getStoreName());
+            vo.setStoreType(s.getStoreType());
+            vo.setProvince(s.getProvince());
+            vo.setCity(s.getCity());
+            vo.setDistrict(s.getDistrict());
+            vo.setAddress(s.getAddress());
+            vo.setFullAddress(joinAddress(s));
+            vos.add(vo);
+        }
+        return vos;
+    }
+
+    /** 省市区 + 详细地址拼接（空段自动跳过） */
+    private String joinAddress(Store s) {
+        StringBuilder sb = new StringBuilder();
+        for (String part : new String[]{s.getProvince(), s.getCity(), s.getDistrict(), s.getAddress()}) {
+            if (part != null && !part.isBlank()) {
+                sb.append(part);
+            }
+        }
+        return sb.toString();
     }
 
     // ==================== D14 目录变更复核确认/驳回（v13） ====================

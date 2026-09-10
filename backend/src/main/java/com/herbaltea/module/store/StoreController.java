@@ -16,6 +16,7 @@ import com.herbaltea.module.store.dto.PendingCatalogReviewVO;
 import com.herbaltea.module.store.dto.StoreAdminBindRequest;
 import com.herbaltea.module.store.dto.StoreAdminVO;
 import com.herbaltea.module.store.dto.StoreBindingVO;
+import com.herbaltea.module.store.dto.StoreBriefVO;
 import com.herbaltea.module.store.dto.SwitchStoreRequest;
 import com.herbaltea.module.store.entity.FranchiseApplication;
 import io.swagger.v3.oas.annotations.Operation;
@@ -172,6 +173,14 @@ public class StoreController {
         requireStore();
         storeService.rejectCatalogReview(id, UserContext.get().getAdminId(), req.note());
         return Result.ok();
+    }
+
+    // ==================== C 端门店列表（v29，小程序选店） ====================
+
+    @Operation(summary = "C 端门店列表", description = "仅返回正常营业门店，不含联系人与执照等敏感字段")
+    @GetMapping("/list")
+    public Result<List<StoreBriefVO>> listOpenStores() {
+        return Result.ok(storeService.listOpenStores());
     }
 
     // ==================== MULTI_STORE：多店绑定与切换（v14） ====================

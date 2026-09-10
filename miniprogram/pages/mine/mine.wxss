@@ -1,0 +1,83 @@
+.header {
+  display: flex;
+  align-items: center;
+  background: #2b7a5e;
+  padding: 40rpx 30rpx;
+}
+
+.avatar {
+  width: 120rpx;
+  height: 120rpx;
+  border-radius: 60rpx;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 44rpx;
+  font-weight: 600;
+}
+
+.header-body {
+  margin-left: 24rpx;
+  color: #fff;
+}
+
+.nick {
+  font-size: 34rpx;
+  font-weight: 600;
+}
+
+.phone {
+  font-size: 24rpx;
+  opacity: 0.8;
+  margin-top: 8rpx;
+}
+
+.container {
+  margin-top: -20rpx;
+}
+
+.points-card {
+  background: linear-gradient(135deg, #ffffff, #f2f8f5);
+}
+
+.points-num {
+  font-size: 58rpx;
+  font-weight: 700;
+  color: #2b7a5e;
+  margin: 12rpx 0 16rpx;
+}
+
+.row-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.block-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 20rpx;
+}
+
+.order-grid {
+  display: flex;
+}
+
+.order-cell {
+  flex: 1;
+  text-align: center;
+}
+
+.order-cell-name {
+  font-size: 26rpx;
+  color: #606266;
+}
+
+.arrow {
+  color: #c0c4cc;
+}

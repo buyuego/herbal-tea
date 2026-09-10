@@ -1,0 +1,56 @@
+<view class="loading" wx:if="{{loading}}">加载中...</view>
+
+<block wx:elif="{{product}}">
+  <swiper class="gallery" indicator-dots="{{images.length > 1}}" circular>
+    <swiper-item wx:for="{{images}}" wx:key="*this">
+      <image class="gallery-img" src="{{item}}" mode="aspectFill" />
+    </swiper-item>
+  </swiper>
+
+  <view class="card">
+    <view class="title-row">
+      <text class="price-lg">¥{{sku.priceText}}</text>
+      <text class="muted" wx:if="{{sku.stock > 0}}">库存 {{sku.stock}}</text>
+      <text class="muted" wx:else>缺货</text>
+    </view>
+    <view class="p-name">{{product.name}}</view>
+    <view class="muted">{{product.subtitle}}</view>
+  </view>
+
+  <view class="card" wx:if="{{product.formula}}">
+    <view class="block-title">配方</view>
+    <view class="muted">{{product.formula}}</view>
+  </view>
+
+  <view class="card">
+    <view class="block-title">规格</view>
+    <view class="sku-wrap">
+      <view
+        wx:for="{{skuList}}"
+        wx:key="skuId"
+        class="sku {{skuIndex === index ? 'sku-active' : ''}} {{item.stock <= 0 ? 'sku-disabled' : ''}}"
+        data-index="{{index}}"
+        bindtap="onSku"
+      >{{item.specsText}}</view>
+    </view>
+    <view class="between qty-row">
+      <text>数量</text>
+      <view class="qty">
+        <view class="qty-btn" data-delta="-1" bindtap="onQty">-</view>
+        <view class="qty-num">{{qty}}</view>
+        <view class="qty-btn" data-delta="1" bindtap="onQty">+</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{detailNodes}}">
+    <view class="block-title">商品详情</view>
+    <rich-text nodes="{{detailNodes}}" />
+  </view>
+
+  <view class="footer-space"></view>
+  <view class="footer">
+    <view class="btn-ghost footer-btn" bindtap="addCart">加入购物车</view>
+    <view class="btn-primary footer-btn" bindtap="buyNow">立即购买</view>
+  </view>
+</block>

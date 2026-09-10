@@ -2,6 +2,7 @@ package com.herbaltea.module.marketing;
 
 import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.herbaltea.module.marketing.dto.PointRecordVO;
+import com.herbaltea.module.marketing.entity.UserPointsAccount;
 
 /**
  * 营销模块（promotions / coupons / user_coupons / point_records / banners）
@@ -53,4 +54,11 @@ public interface MarketingService {
      * 会员积分流水分页（v26：B 端会员详情展示；跨模块只读入口，changeType 为 null 查全部）
      */
     IPage<PointRecordVO> pagePointRecords(Long userId, Integer changeType, long page, long size);
+
+    /**
+     * 查询积分账户（v29：C 端「我的积分」）。
+     *
+     * @return 账户（从未有过积分往来时返回 null，调用方按零值处理）
+     */
+    UserPointsAccount pointsAccount(Long userId);
 }

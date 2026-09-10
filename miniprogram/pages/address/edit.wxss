@@ -1,0 +1,30 @@
+.field {
+  display: flex;
+  align-items: center;
+  padding: 22rpx 0;
+  border-bottom: 2rpx solid #f7f8fa;
+}
+
+.field:last-child {
+  border-bottom: none;
+}
+
+.label {
+  width: 160rpx;
+  font-size: 28rpx;
+  color: #606266;
+  flex-shrink: 0;
+}
+
+.input {
+  flex: 1;
+  font-size: 28rpx;
+}
+
+.picker {
+  color: #303133;
+}
+
+.save-btn {
+  margin-top: 40rpx;
+}

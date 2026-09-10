@@ -13,7 +13,10 @@ import com.herbaltea.module.product.dto.ProductCreateRequest;
 import com.herbaltea.module.product.dto.ProductDetailVO;
 import com.herbaltea.module.product.dto.ProductPageQuery;
 import com.herbaltea.module.product.dto.ProductUpdateRequest;
+import com.herbaltea.module.product.dto.ShelfProductVO;
+import com.herbaltea.module.product.dto.ShelfQuery;
 import com.herbaltea.module.product.dto.SkuAddRequest;
+import com.herbaltea.module.product.dto.SkuForSaleVO;
 import com.herbaltea.module.product.dto.StockAdjustRequest;
 import com.herbaltea.module.product.dto.StoreListingRequest;
 import com.herbaltea.module.product.dto.StorePriceRequest;
@@ -220,5 +223,27 @@ public class ProductController {
     public Result<List<StoreProductVO>> listStoreProducts(
             @RequestParam(required = false) Integer status) {
         return Result.ok(productService.listStoreProducts(UserContext.storeId(), status));
+    }
+
+    // ==================== C 端货架（v29，小程序） ====================
+
+    @Operation(summary = "C 端门店在售商品分页", description = "按门店浏览货架：商品头 + 本店在售 SKU（本店价与库存）；不含成本价等敏感字段")
+    @GetMapping("/shelf/products")
+    public Result<IPage<ShelfProductVO>> pageShelfProducts(@ModelAttribute ShelfQuery query) {
+        return Result.ok(productService.pageShelfProducts(query));
+    }
+
+    @Operation(summary = "C 端商品详情", description = "本店在售商品详情：含配方/图集/富文本与在售 SKU；未上架返回 40400")
+    @GetMapping("/shelf/products/{productId}")
+    public Result<ShelfProductVO> getShelfProduct(@PathVariable Long productId,
+                                                  @RequestParam Long storeId) {
+        return Result.ok(productService.getShelfProduct(productId, storeId));
+    }
+
+    @Operation(summary = "C 端 SKU 详情", description = "本店在售价 + 可售库存；未上架或已停用返回 40400/40000")
+    @GetMapping("/shelf/skus/{skuId}")
+    public Result<SkuForSaleVO> getShelfSku(@PathVariable Long skuId,
+                                            @RequestParam Long storeId) {
+        return Result.ok(productService.getShelfSku(skuId, storeId));
     }
 }

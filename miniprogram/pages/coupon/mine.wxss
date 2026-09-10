@@ -1,0 +1,52 @@
+.tabs {
+  display: flex;
+  background: #fff;
+  border-bottom: 2rpx solid #f0f2f5;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 24rpx 0;
+  font-size: 28rpx;
+  color: #606266;
+}
+
+.tab-active {
+  color: #2b7a5e;
+  font-weight: 600;
+  border-bottom: 4rpx solid #2b7a5e;
+}
+
+.coupon {
+  display: flex;
+  align-items: center;
+}
+
+.coupon-dim {
+  opacity: 0.55;
+}
+
+.coupon-left {
+  width: 200rpx;
+  text-align: center;
+  border-right: 2rpx dashed #e4e7ed;
+  padding-right: 16rpx;
+}
+
+.coupon-amount {
+  font-size: 40rpx;
+  font-weight: 700;
+  color: #e6a23c;
+}
+
+.coupon-right {
+  flex: 1;
+  padding-left: 24rpx;
+}
+
+.coupon-name {
+  font-size: 28rpx;
+  font-weight: 600;
+  margin-bottom: 10rpx;
+}

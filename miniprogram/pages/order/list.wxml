@@ -1,0 +1,47 @@
+<view class="tabs">
+  <view
+    wx:for="{{tabs}}"
+    wx:key="label"
+    class="tab {{tabIndex === index ? 'tab-active' : ''}}"
+    data-index="{{index}}"
+    bindtap="onTab"
+  >{{item.label}}</view>
+</view>
+
+<view class="container">
+  <view class="card" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="toDetail">
+    <view class="between">
+      <text class="muted">{{item.orderNo}}</text>
+      <text class="status">{{item.statusText}}</text>
+    </view>
+    <view class="between amount-row">
+      <text class="muted">实付</text>
+      <text class="price">¥{{item.payAmountText}}</text>
+    </view>
+    <view class="muted" wx:if="{{item.couponText || item.pointsText}}">
+      <text wx:if="{{item.couponText}}">券抵扣 ¥{{item.couponText}} </text>
+      <text wx:if="{{item.pointsText}}">积分抵扣 {{item.pointsText}} 分</text>
+    </view>
+    <view class="between">
+      <text class="muted">下单 {{item.createdText}}</text>
+      <text class="muted" wx:if="{{item.expireText}}">需在 {{item.expireText}} 前支付</text>
+    </view>
+
+    <view class="actions">
+      <block wx:if="{{item.status === 10}}">
+        <view class="btn-ghost act" data-id="{{item.id}}" catchtap="cancel">取消订单</view>
+        <view class="btn-primary act" data-id="{{item.id}}" catchtap="pay">去支付</view>
+      </block>
+      <block wx:elif="{{item.status === 40}}">
+        <view class="btn-primary act" data-id="{{item.id}}" catchtap="sign">确认收货</view>
+      </block>
+      <block wx:else>
+        <view class="btn-ghost act" data-id="{{item.id}}" catchtap="toDetail">查看详情</view>
+      </block>
+    </view>
+  </view>
+</view>
+
+<view class="empty" wx:if="{{!loading && !list.length}}">暂无订单</view>
+<view class="loading" wx:if="{{loading}}">加载中...</view>
+<view class="loading" wx:elif="{{finished && list.length}}">没有更多了</view>

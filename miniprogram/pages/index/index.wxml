@@ -1,0 +1,42 @@
+<view class="store-bar" bindtap="chooseStore">
+  <view class="store-left">
+    <text class="store-label">当前门店</text>
+    <text class="store-name">{{storeName || '请选择门店'}}</text>
+  </view>
+  <text class="store-switch">切换 ›</text>
+</view>
+
+<scroll-view class="cate-bar" scroll-x enable-flex>
+  <view class="cate {{categoryId === 0 ? 'cate-active' : ''}}" data-id="0" bindtap="onCate">全部</view>
+  <view
+    wx:for="{{categories}}"
+    wx:key="id"
+    class="cate {{categoryId === item.id ? 'cate-active' : ''}}"
+    data-id="{{item.id}}"
+    bindtap="onCate"
+  >{{item.name}}</view>
+</scroll-view>
+
+<view class="goods">
+  <view
+    class="goods-item"
+    wx:for="{{products}}"
+    wx:key="productId"
+    data-id="{{item.productId}}"
+    bindtap="toProduct"
+  >
+    <image class="goods-img" src="{{item.mainImage}}" mode="aspectFill" />
+    <view class="goods-name">{{item.name}}</view>
+    <view class="goods-sub">{{item.subtitle}}</view>
+    <view class="goods-foot">
+      <text class="price">¥{{item.minPrice}}</text>
+      <text class="sold-out" wx:if="{{item.soldOut}}">缺货</text>
+    </view>
+  </view>
+</view>
+
+<view class="empty" wx:if="{{!loading && !products.length}}">
+  {{storeId ? '该门店暂无在售商品' : '请先选择门店'}}
+</view>
+<view class="loading" wx:if="{{loading}}">加载中...</view>
+<view class="loading" wx:elif="{{finished && products.length}}">没有更多了</view>

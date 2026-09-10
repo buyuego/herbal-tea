@@ -249,6 +249,11 @@ public class MarketingServiceImpl implements MarketingService {
         return result;
     }
 
+    @Override
+    public UserPointsAccount pointsAccount(Long userId) {
+        return accountMapper.selectByUserId(userId);
+    }
+
     /** 当前可用积分（无账户记 0） */
     private Long currentBalance(Long userId) {
         UserPointsAccount acc = accountMapper.selectByUserId(userId);

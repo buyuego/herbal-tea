@@ -1,0 +1,28 @@
+<view class="tabs">
+  <view
+    wx:for="{{tabs}}"
+    wx:key="status"
+    class="tab {{tabIndex === index ? 'tab-active' : ''}}"
+    data-index="{{index}}"
+    bindtap="onTab"
+  >{{item.label}}</view>
+</view>
+
+<view class="container">
+  <view class="card coupon {{item.status !== 0 ? 'coupon-dim' : ''}}" wx:for="{{list}}" wx:key="id">
+    <view class="coupon-left">
+      <view class="coupon-amount">{{item.discountText}}</view>
+      <view class="muted">{{item.thresholdText}}</view>
+    </view>
+    <view class="coupon-right">
+      <view class="coupon-name">{{item.couponName}}</view>
+      <view class="muted">{{item.scopeDesc}}{{item.storeName ? ' · ' + item.storeName : ''}}</view>
+      <view class="muted">
+        {{item.status === 0 ? '有效期至 ' + item.expireText : item.statusDesc + (item.usedText ? ' ' + item.usedText : '')}}
+      </view>
+    </view>
+  </view>
+</view>
+
+<view class="empty" wx:if="{{!loading && !list.length}}">暂无优惠券</view>
+<view class="loading" wx:if="{{loading}}">加载中...</view>

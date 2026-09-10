@@ -65,6 +65,42 @@ public interface UserCouponMapper extends BaseMapper<UserCoupon> {
                                    @Param("status") Integer status);
 
     /**
+     * C 端「我的券包」（v29）：按状态 / 门店 / 订单金额过滤。
+     *
+     * <p>门店口径：平台券（scope=1，store_id 为 NULL）全店通用；本店券仅限绑定门店。
+     * <p>usableAmount 传订单商品小计时只返回门槛已满足的券（传 null 表示不过滤门槛）。
+     */
+    @Select("""
+            <script>
+            SELECT uc.id AS id, uc.user_id AS userId, uc.coupon_id AS couponId,
+                   c.name AS couponName, c.type AS type, c.scope AS scope,
+                   uc.store_id AS storeId, s.store_name AS storeName,
+                   c.threshold_amount AS thresholdAmount, c.discount_amount AS discountAmount,
+                   c.rules AS rules, uc.status AS status, uc.order_id AS orderId,
+                   o.order_no AS orderNo, uc.received_at AS receivedAt,
+                   uc.used_at AS usedAt, uc.expire_at AS expireAt
+            FROM user_coupons uc
+                     JOIN coupons c ON c.id = uc.coupon_id
+                     LEFT JOIN stores s ON s.id = uc.store_id
+                     LEFT JOIN orders o ON o.id = uc.order_id
+            WHERE uc.user_id = #{userId}
+              AND (#{status} IS NULL OR uc.status = #{status})
+              <if test="storeId != null">
+                AND (uc.store_id IS NULL OR uc.store_id = #{storeId})
+              </if>
+              <if test="usableAmount != null">
+                AND c.threshold_amount &lt;= #{usableAmount}
+              </if>
+            ORDER BY uc.expire_at ASC, uc.id ASC
+            </script>
+            """)
+    IPage<UserCouponVO> pageMyCoupons(IPage<?> page,
+                                      @Param("userId") Long userId,
+                                      @Param("storeId") Long storeId,
+                                      @Param("usableAmount") java.math.BigDecimal usableAmount,
+                                      @Param("status") Integer status);
+
+    /**
      * 券模板的领取记录（v28：B 端查看发放情况）。
      */
     @Select("""

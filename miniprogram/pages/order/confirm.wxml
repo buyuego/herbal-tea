@@ -1,0 +1,104 @@
+<view class="container">
+  <view class="card addr" bindtap="pickAddress">
+    <block wx:if="{{address}}">
+      <view class="between">
+        <text class="addr-name">{{address.receiverName}}</text>
+        <text class="muted">{{address.phone}}</text>
+      </view>
+      <view class="muted addr-detail">{{address.province}}{{address.city}}{{address.district}}{{address.detail}}</view>
+    </block>
+    <view wx:else class="muted">请添加收货地址 ›</view>
+  </view>
+
+  <view class="card">
+    <view class="block-title">商品清单</view>
+    <view class="item" wx:for="{{items}}" wx:key="skuId">
+      <image class="item-img" src="{{item.image}}" mode="aspectFill" />
+      <view class="item-body">
+        <view class="item-name">{{item.name}}</view>
+        <view class="muted">{{item.specsText}}</view>
+        <view class="between">
+          <text class="price">¥{{item.priceText}}</text>
+          <text class="muted">x{{item.qty}}</text>
+        </view>
+        <view class="muted">小计 ¥{{item.subtotalText}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{multi}}">
+    <view class="muted">购物车含 {{items.length}} 件商品，将生成 {{items.length}} 笔订单；优惠券与积分仅支持单件下单使用。</view>
+  </view>
+
+  <view class="card" wx:elif="{{coupons.length}}">
+    <view class="block-title">可用优惠券（{{coupons.length}}）</view>
+    <view
+      wx:for="{{coupons}}"
+      wx:key="id"
+      class="coupon-opt {{userCouponId === item.id ? 'coupon-opt-active' : ''}}"
+      data-id="{{item.id}}"
+      bindtap="onPickCoupon"
+    >
+      <view class="between">
+        <text>{{item.couponName}}</text>
+        <text class="price" wx:if="{{item.type === 1}}">-¥{{item.discountAmount}}</text>
+        <text class="primary" wx:else>折扣券</text>
+      </view>
+      <view class="muted">{{item.scopeDesc}} · 有效期至 {{item.expireText}}</view>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{!multi}}">
+    <view class="between">
+      <view>
+        <text>使用积分</text>
+        <text class="muted">（余额 {{pointsBalance}}，本单最多抵 {{maxPoints}} 分）</text>
+      </view>
+      <switch checked="{{usePoints}}" color="#2b7a5e" bindchange="onTogglePoints" />
+    </view>
+    <view class="between points-row" wx:if="{{usePoints}}">
+      <input
+        class="points-input"
+        type="number"
+        value="{{pointsToUse}}"
+        bindblur="onPointsInput"
+        placeholder="输入使用积分"
+      />
+      <text class="muted">抵 ¥{{pointsDeductText}}</text>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="between">
+      <text>订单备注</text>
+      <input class="remark" value="{{remark}}" bindinput="onRemark" placeholder="选填，如口味偏好" />
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="between amount-line">
+      <text class="muted">商品金额</text>
+      <text>¥{{subtotalText}}</text>
+    </view>
+    <view class="between amount-line">
+      <text class="muted">优惠券</text>
+      <text>-¥{{couponText}}</text>
+    </view>
+    <view class="between amount-line">
+      <text class="muted">积分抵扣</text>
+      <text>-¥{{pointsDeductText}}</text>
+    </view>
+    <view class="between amount-line">
+      <text>应付</text>
+      <text class="price">¥{{payAmountText}}</text>
+    </view>
+  </view>
+</view>
+
+<view class="footer-space"></view>
+<view class="footer">
+  <view class="footer-total">
+    应付 <text class="price">¥{{payAmountText}}</text>
+  </view>
+  <view class="btn-primary pay-btn" bindtap="submit">提交订单</view>
+</view>
